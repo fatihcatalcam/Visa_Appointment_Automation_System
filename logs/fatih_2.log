@@ -11942,3 +11942,18 @@ Symbols not available. Dumping unresolved backtrace:
 [2026-03-05 23:45:24] INFO - 📝 Randevu Detayları: ID=[Bulunamadı], Date=[Bulunamadı], Time=[Bulunamadı]
 [2026-03-05 23:45:24] INFO - ✅✅✅ RANDEVU BAŞARIYLA ALINDI! ✅✅✅
 [2026-03-05 23:45:24] INFO - Randevu bulunduğu için bot beklemeye alındı (1 Saat).
+[2026-03-06 00:14:33] INFO - Bot başlatılıyor... [Scout Modu: Kapalı]
+[2026-03-06 00:14:33] INFO - Normal (Görünür) Chrome başlatılıyor... [UA: Chrome 122.0.2863.15]
+[2026-03-06 00:14:37] INFO - Stealth JS Enjekte Edildi.
+[2026-03-06 00:14:37] INFO - Chrome WebDriver başlatıldı (Network Loglama Aktif)
+[2026-03-06 00:14:41] INFO - 🔍 3 cookie yüklendi, oturum kontrol ediliyor...
+[2026-03-06 00:14:45] INFO - ❌ Cookie oturumu süresi dolmuş. Normal login yapılacak.
+[2026-03-06 00:14:45] INFO - Giriş yapılıyor...
+[2026-03-06 00:14:50] INFO - Görünür input sayısı: 1
+[2026-03-06 00:14:51] INFO - Email girildi: fthctlcm@outlook.com
+[2026-03-06 00:14:55] INFO - Verify tıklanıyor...
+[2026-03-06 00:15:03] INFO - Captcha ve Ã…ifre alanı aynı anda tespit edildi. Önce şifre girilecek...
+[2026-03-06 00:15:04] INFO - Ã…ifre sayfası bekleniyor... (10.0 sn)
+[2026-03-06 00:15:11] INFO - Giriş/Ã…ifre Denemesi: 1/3
+[2026-03-06 00:15:15] INFO - Ã…ifre girildi
+[2026-03-06 00:15:17] INFO - CAPTCHA çözülüyor (Ã…ifre girildi, şimdi Submit edilecek)...

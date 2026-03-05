@@ -8912,3 +8912,26 @@
 {"timestamp": 1772743524.0962012, "level": "INFO", "user_id": 2, "message": "\ud83d\udcdd Randevu Detaylar\u0131: ID=[Bulunamad\u0131], Date=[Bulunamad\u0131], Time=[Bulunamad\u0131]", "proxy": ""}
 {"timestamp": 1772743524.2937236, "level": "INFO", "user_id": 2, "message": "\u2705\u2705\u2705 RANDEVU BA\u015eARIYLA ALINDI! \u2705\u2705\u2705", "proxy": ""}
 {"timestamp": 1772743524.6335807, "level": "INFO", "user_id": 2, "message": "Randevu bulundu\u011fu i\u00e7in bot beklemeye al\u0131nd\u0131 (1 Saat).", "proxy": ""}
+{"timestamp": 1772745266.3739114, "level": "INFO", "user_id": 1, "message": "Bot ba\u015flat\u0131l\u0131yor... [Scout Modu: Kapal\u0131]", "proxy": ""}
+{"timestamp": 1772745266.9574287, "level": "INFO", "user_id": 1, "message": "Normal (G\u00f6r\u00fcn\u00fcr) Chrome ba\u015flat\u0131l\u0131yor... [UA: Chrome 121.0.1362.29]", "proxy": ""}
+{"timestamp": 1772745270.0124853, "level": "INFO", "user_id": 1, "message": "Durdurma sinyali al\u0131nd\u0131. Chrome kapat\u0131l\u0131yor...", "proxy": ""}
+{"timestamp": 1772745271.1307538, "level": "INFO", "user_id": 1, "message": "\ud83d\udd0d 0 cookie kaydedildi: c:\\Users\\Fatih\\comp-bot\\data\\sessions\\1.json", "proxy": ""}
+{"timestamp": 1772745273.3072286, "level": "INFO", "user_id": 2, "message": "Bot ba\u015flat\u0131l\u0131yor... [Scout Modu: Kapal\u0131]", "proxy": ""}
+{"timestamp": 1772745273.711929, "level": "INFO", "user_id": 2, "message": "Normal (G\u00f6r\u00fcn\u00fcr) Chrome ba\u015flat\u0131l\u0131yor... [UA: Chrome 122.0.2863.15]", "proxy": ""}
+{"timestamp": 1772745274.2519505, "level": "INFO", "user_id": 1, "message": "WebDriver kapat\u0131ld\u0131", "proxy": ""}
+{"timestamp": 1772745277.3555503, "level": "INFO", "user_id": 2, "message": "Stealth JS Enjekte Edildi.", "proxy": ""}
+{"timestamp": 1772745277.3575609, "level": "INFO", "user_id": 2, "message": "Chrome WebDriver ba\u015flat\u0131ld\u0131 (Network Loglama Aktif)", "proxy": ""}
+{"timestamp": 1772745281.291089, "level": "INFO", "user_id": 2, "message": "\ud83d\udd0d 3 cookie y\u00fcklendi, oturum kontrol ediliyor...", "proxy": ""}
+{"timestamp": 1772745285.1174462, "level": "INFO", "user_id": 2, "message": "\u274c Cookie oturumu s\u00fcresi dolmu\u015f. Normal login yap\u0131lacak.", "proxy": ""}
+{"timestamp": 1772745285.3912225, "level": "INFO", "user_id": 2, "message": "Giri\u015f yap\u0131l\u0131yor...", "proxy": ""}
+{"timestamp": 1772745290.4736612, "level": "ERROR", "user_id": 1, "message": "WebDriver ba\u015flatma hatas\u0131: HTTPConnectionPool(host='localhost', port=51431): Max retries exceeded with url: /session/d832d762496f3e193677834b98f78f01/goog/cdp/execute (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x000001EE8A609280>: Failed to establish a new connection: [WinError 10061] Hedef makine etkin olarak reddetti\u011finden ba\u011flant\u0131 kurulamad\u0131'))", "proxy": ""}
+{"timestamp": 1772745290.5682416, "level": "INFO", "user_id": 2, "message": "G\u00f6r\u00fcn\u00fcr input say\u0131s\u0131: 1", "proxy": ""}
+{"timestamp": 1772745290.908353, "level": "ERROR", "user_id": 1, "message": "Chrome ba\u015flat\u0131lamad\u0131.", "proxy": ""}
+{"timestamp": 1772745291.8255396, "level": "INFO", "user_id": 2, "message": "Email girildi: fthctlcm@outlook.com", "proxy": ""}
+{"timestamp": 1772745292.161958, "level": "INFO", "user_id": 1, "message": "Bot durduruldu.", "proxy": ""}
+{"timestamp": 1772745295.1454828, "level": "INFO", "user_id": 2, "message": "Verify t\u0131klan\u0131yor...", "proxy": ""}
+{"timestamp": 1772745303.6423895, "level": "INFO", "user_id": 2, "message": "Captcha ve \u00c3\u2026ifre alan\u0131 ayn\u0131 anda tespit edildi. \u00d6nce \u015fifre girilecek...", "proxy": ""}
+{"timestamp": 1772745304.747691, "level": "INFO", "user_id": 2, "message": "\u00c3\u2026ifre sayfas\u0131 bekleniyor... (10.0 sn)", "proxy": ""}
+{"timestamp": 1772745311.3520975, "level": "INFO", "user_id": 2, "message": "Giri\u015f/\u00c3\u2026ifre Denemesi: 1/3", "proxy": ""}
+{"timestamp": 1772745315.830496, "level": "INFO", "user_id": 2, "message": "\u00c3\u2026ifre girildi", "proxy": ""}
+{"timestamp": 1772745317.3712015, "level": "INFO", "user_id": 2, "message": "CAPTCHA \u00e7\u00f6z\u00fcl\u00fcyor (\u00c3\u2026ifre girildi, \u015fimdi Submit edilecek)...", "proxy": ""}

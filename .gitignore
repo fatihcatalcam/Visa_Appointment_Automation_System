@@ -1,0 +1,73 @@
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ========================
+# Ortam & Gizli Dosyalar
+# ========================
+.env
+.env.*
+venv/
+.venv/
+env/
+
+# ========================
+# Veritabanı
+# ========================
+*.db
+*.sqlite3
+
+# ========================
+# Log Dosyaları
+# ========================
+*.log
+logs/
+
+# ========================
+# Geçici / Test Dosyaları
+# ========================
+test_photo.jpg
+last_captcha_grid.png
+
+# ========================
+# IDE / Editör
+# ========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.cursor/
+
+# ========================
+# Pytest
+# ========================
+.pytest_cache/
+htmlcov/
+.coverage
+
+# ========================
+# Docker (opsiyonel)
+# ========================
+# docker-compose.yml → repoda kalsın
+
+# ========================
+# OS Dosyaları
+# ========================
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ========================
+# Gemini / AI Agent
+# ========================
+.gemini/
+.agents/

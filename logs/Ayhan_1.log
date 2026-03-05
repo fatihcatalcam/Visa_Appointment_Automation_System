@@ -3983,3 +3983,11 @@ Symbols not available. Dumping unresolved backtrace:
 [2026-03-03 23:21:31] INFO - Bot durduruldu.
 [2026-03-03 23:21:47] DEBUG - Cookie kaydetme hatası: HTTPConnectionPool(host='localhost', port=55196): Max retries exceeded with url: /session/1393f888e165c8fc406e5b4e732701fd/cookie (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x000001BF8B3E80B0>: Failed to establish a new connection: [WinError 10061] Hedef makine etkin olarak reddettiğinden bağlantı kurulamadı'))
 [2026-03-03 23:21:47] INFO - WebDriver kapatıldı
+[2026-03-06 00:14:26] INFO - Bot başlatılıyor... [Scout Modu: Kapalı]
+[2026-03-06 00:14:26] INFO - Normal (Görünür) Chrome başlatılıyor... [UA: Chrome 121.0.1362.29]
+[2026-03-06 00:14:30] INFO - Durdurma sinyali alındı. Chrome kapatılıyor...
+[2026-03-06 00:14:31] INFO - 🔍 0 cookie kaydedildi: c:\Users\Fatih\comp-bot\data\sessions\1.json
+[2026-03-06 00:14:34] INFO - WebDriver kapatıldı
+[2026-03-06 00:14:50] ERROR - WebDriver başlatma hatası: HTTPConnectionPool(host='localhost', port=51431): Max retries exceeded with url: /session/d832d762496f3e193677834b98f78f01/goog/cdp/execute (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x000001EE8A609280>: Failed to establish a new connection: [WinError 10061] Hedef makine etkin olarak reddettiğinden bağlantı kurulamadı'))
+[2026-03-06 00:14:50] ERROR - Chrome başlatılamadı.
+[2026-03-06 00:14:52] INFO - Bot durduruldu.

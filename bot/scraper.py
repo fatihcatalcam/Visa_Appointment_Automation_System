@@ -1498,387 +1498,41 @@ class BLSScraper:
                         target_month = month_names[mt]
             if "(" in str(target_date):
                 target_month = str(target_date).split("(")[1].replace(")", "").strip()
+            
+            # ⚠️ ROOT CAUSE FIX: Bu log satırı ve altındaki TÜM takvim etkileşimi
+            # DAHA ÖNCE `if "(" in str(target_date):` bloğunun İÇİNDE idi!
+            # target_date "DD/MM/YYYY" formatında olduğunda (parantez yok) TÜM takvim
+            # adımları atlanıyor ve bot direkt Submit'e basıyordu.
+            # Şimdi bu blok her zaman çalışacak.
+            self._log(logging.INFO, f"  Kendo takvimde gun seciliyor: day_num='{day_num}' | target_date='{target_date}' | target_month='{target_month or 'BOŞ - navigasyon YOK'}'")
+            
+            # --- [DETERMINISTIC CALENDAR INTERACTION - Tüm hatalar çözüldü] ---
+            # ROOT CAUSE FIX #1: Regex'i /[0-9]+/g kullan. Python triple-string'de \d
+            #   Python->JS escape'den geçince /\\d+/g olur (literal backslash+d, rakam değil)!
+            #   Bu yüzden rgba her zaman null, yeşil renk hiç tespit edilemiyordu.
+            # ROOT CAUSE FIX #2: Viewport sınırı kontrolü (left:-9999px honeypot'u yakalar)
+            # ROOT CAUSE FIX #3: Tek atomik JS fonksiyon (Python<->JS round-trip race yok)
+            # ROOT CAUSE FIX #4: $(link).trigger('click') - Kendo'nun kendi event handler'ı
+            try:
+                # ─── ADIM 1: TAKVİMİ AÇ ───────────────────────────────────────────
+                self._log(logging.INFO, "  [CAL] Adim 1/3: Takvim ikonu tiklaniyor...")
                 
-                self._log(logging.INFO, f"  Kendo takvimde gun seciliyor: day_num='{day_num}' | target_date='{target_date}' | target_month='{target_month or 'BOŞ - navigasyon YOK'}'")
+                # Takvim zaten açık mı kontrol et
+                cal_open = self.driver.execute_script("""
+                    var cal = document.querySelector('div.k-calendar-container, div.k-animation-container');
+                    return cal && window.getComputedStyle(cal).display !== 'none';
+                """)
                 
-                # --- [DETERMINISTIC CALENDAR INTERACTION - Tüm hatalar çözüldü] ---
-                # ROOT CAUSE FIX #1: Regex'i /[0-9]+/g kullan. Python triple-string'de \d
-                #   Python->JS escape'den geçince /\\d+/g olur (literal backslash+d, rakam değil)!
-                #   Bu yüzden rgba her zaman null, yeşil renk hiç tespit edilemiyordu.
-                # ROOT CAUSE FIX #2: Viewport sınırı kontrolü (left:-9999px honeypot'u yakalar)
-                # ROOT CAUSE FIX #3: Tek atomik JS fonksiyon (Python<->JS round-trip race yok)
-                # ROOT CAUSE FIX #4: $(link).trigger('click') - Kendo'nun kendi event handler'ı
-                try:
-                    # ─── ADIM 1: TAKVİMİ AÇ ───────────────────────────────────────────
-                    self._log(logging.INFO, "  [CAL] Adim 1/3: Takvim ikonu tiklaniyor...")
-                    
-                    # Takvim zaten açık mı kontrol et
-                    cal_open = self.driver.execute_script("""
-                        var cal = document.querySelector('div.k-calendar-container, div.k-animation-container');
-                        return cal && window.getComputedStyle(cal).display !== 'none';
-                    """)
-                    
-                    if not cal_open:
-                        # Görünür takvim ikonunu bul ve tıkla
-                        # Takvimin gerçekten acildigini garanti altina almak icin retry mekanizmasi
-                        cal_opened_successfully = False
-                        for cal_try in range(3):
-                            opened = self.driver.execute_script("""
-                                function isReal(el) {
-                                    if (!el) return false;
-                                    var r = el.getBoundingClientRect();
-                                    if (r.width <= 0 || r.height <= 0) return false;
-                                    if (r.right < -50) return false;
-                                    var c = el;
-                                    while (c) {
-                                        var s = window.getComputedStyle(c);
-                                        if (s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)===0) return false;
-                                        c = c.parentElement;
-                                    }
-                                    return true;
-                                }
-                                
-                                // 1) Takvim zaten acik mi?
-                                var openCals = Array.from(document.querySelectorAll('.k-animation-container .k-calendar-container, .k-calendar-container.k-state-border-down'))
-                                    .filter(isReal);
-                                if (openCals.length > 0) return 'ALREADY_OPEN';
-                                
-                                // 2) Acik degilse butonu bul ve tikla
-                                var icon = Array.from(document.querySelectorAll(
-                                    'span.k-icon.k-i-calendar, .k-datepicker .k-select, .k-picker-wrap .k-select'
-                                )).find(isReal);
-                                
-                                if (icon) {
-                                    icon.scrollIntoView({block: 'center', behavior: 'instant'});
-                                    if (typeof $ !== 'undefined') { $(icon).trigger('click'); }
-                                    else { icon.click(); }
-                                    return 'CLICKED_ICON';
-                                }
-                                
-                                // Fallback: input'a tikla
-                                var input = Array.from(document.querySelectorAll('input[data-role="datepicker"]')).find(isReal);
-                                if (input) {
-                                    input.scrollIntoView({block: 'center', behavior: 'instant'});
-                                    if (typeof $ !== 'undefined') { $(input).trigger('click'); }
-                                    else { input.click(); }
-                                    return 'CLICKED_INPUT';
-                                }
-                                
-                                return 'NOT_FOUND';
-                            """)
-                            
-                            if opened == 'NOT_FOUND':
-                                self._log(logging.ERROR, "  [CAL] Takvim ikonu veya input'u bulunamadi!")
-                                break
-                            
-                            if opened == 'ALREADY_OPEN':
-                                cal_opened_successfully = True
-                                break
-                            
-                            # Tikladik, simdi gercekten acilmasini bekle
-                            try:
-                                WebDriverWait(self.driver, 3).until(
-                                    lambda d: d.execute_script("""
-                                        var cals = document.querySelectorAll('.k-animation-container .k-calendar-container, .k-calendar-container.k-state-border-down');
-                                        for(var i=0; i<cals.length; i++){
-                                            var style = window.getComputedStyle(cals[i].parentElement || cals[i]);
-                                            if (style.display !== 'none' && parseFloat(style.opacity) > 0) return true;
-                                        }
-                                        return false;
-                                    """)
-                                )
-                                cal_opened_successfully = True
-                                break # Basariyla acildi
-                            except Exception:
-                                self._log(logging.WARNING, f"  [CAL] Takvim acilisi gozlemlenemedi (deneme {cal_try+1}/3), tekrar tiklaniyor...")
-                                time.sleep(0.5)
-                        
-                        if not cal_opened_successfully:
-                           self._log(logging.ERROR, "  [CAL] Takvim pop-up'i acilamadi, islem iptal.")
-                           return False
-                        
-                        # Takvimi viewport'a getir (sayfa altında açılmış olabilir!)
-                        self.driver.execute_script("""
-                            var cal = document.querySelector('.k-animation-container .k-calendar-container, .k-calendar-container');
-                            if (cal) cal.scrollIntoView({block: 'center', behavior: 'instant'});
-                        """)
-                        time.sleep(1.0) # Settle suresi
-                    
-                    # ─── ADIM 2: DOĞRU AYA GİT ────────────────────────────────────────
-                    if target_month:
-                        self._log(logging.INFO, f"  [CAL] Adim 2/3: '{target_month}' ayina gidiliyor...")
-                        for nav_attempt in range(18):  # Max 18 ay ileri
-                            # Görünür takvim başlığını oku
-                            title_text = self.driver.execute_script("""
-                                var activeCal = document.querySelector('.k-animation-container .k-calendar-container, .k-calendar-container.k-state-border-down') || document;
-                                var cands = activeCal.querySelectorAll(
-                                    '.k-nav-fast, .k-calendar-header .k-title, .k-calendar .k-header .k-title'
-                                );
-                                for (var i = 0; i < cands.length; i++) {
-                                    var r = cands[i].getBoundingClientRect();
-                                    if (r.width > 0 && r.height > 0) return cands[i].innerText || '';
-                                }
-                                return '';
-                            """) or ""
-                            
-                            self._log(logging.DEBUG, f"    [NAV] Mevcut ay: '{title_text.strip()}' | Hedef: '{target_month}'")
-                            
-                            # title_text = "March 2026" ve target_month = "March 2026" şeklinde olmalı
-                            # Ayın adını ve yılını karşılaştır (büyük/küçük harf duyarsız)
-                            target_parts = target_month.lower().split()
-                            title_lower = title_text.lower()
-                            if all(p in title_lower for p in target_parts):
-                                self._log(logging.INFO, f"  [CAL] Dogru ayda: '{title_text.strip()}'")
-                                break
-                            
-                            # Görünür Next butonunu bul ve tıkla
-                            next_ok = self.driver.execute_script("""
-                                function isReal(el) {
-                                    var r = el.getBoundingClientRect();
-                                    if (r.width <= 0 || r.height <= 0) return false;
-                                    if (r.right < -50) return false;
-                                    var c = el;
-                                    while (c) {
-                                        var s = window.getComputedStyle(c);
-                                        if (s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)===0) return false;
-                                        c = c.parentElement;
-                                    }
-                                    return true;
-                                }
-                                var activeCal = document.querySelector('.k-animation-container .k-calendar-container, .k-calendar-container.k-state-border-down') || document;
-                                var btn = Array.from(activeCal.querySelectorAll(
-                                    '.k-nav-next, .k-calendar-nav-next, [aria-label="Next"]'
-                                )).find(isReal);
-                                if (btn) {
-                                    btn.scrollIntoView({block: 'center', behavior: 'instant'});
-                                    btn.click(); 
-                                    return true; 
-                                }
-                                return false;
-                            """)
-                            
-                            if not next_ok:
-                                self._log(logging.WARNING, f"  [CAL] 'Sonraki Ay' butonu bulunamadi (deneme {nav_attempt+1}), yeniden deneniyor...")
-                                time.sleep(0.5)
-                                continue  # break değil continue: takvim yeniden render olmuş olabilir
-                            
-                            # Ay değişiminin DOM'a yansımasını bekle
-                            try:
-                                WebDriverWait(self.driver, 4).until(
-                                    EC.staleness_of(self.driver.find_element(By.CSS_SELECTOR, "table[role='grid']"))
-                                )
-                            except Exception:
-                                time.sleep(1.0)
-                        else:
-                            self._log(logging.WARNING, f"  [CAL] 18 denemede '{target_month}' ayina ulasılamadi!")
-                    
-                    # ─── ADIM 3: YEŞİL GÜNÜ BUL VE TIKLA ─────────────────────────────
-                    # Anahtar: $(link).trigger('click') - Kendo'nun kendi event handler'ını çağırır.
-                    # Bu, BLS sitesinde subagent tarafından KANITLANMIŞ tek çalışan yöntemdir.
-                    self._log(logging.INFO, f"  [CAL] Adim 3/3: Takvimde gun '{day_num}' aranip jQuery trigger ile tiklaniyor...")
-                    
-                    # Takvim grid'inin güncel DOM'da olduğunu garantile
-                    try:
-                        WebDriverWait(self.driver, 5).until(
-                            EC.presence_of_element_located((By.CSS_SELECTOR, "td[role='gridcell'] .k-link"))
-                        )
-                    except Exception:
-                        pass
-                    
-                    click_result = self.driver.execute_script("""
-                        var day_num = arguments[0];
-                        var activeCal = document.querySelector('.k-animation-container .k-calendar-container, .k-calendar-container.k-state-border-down') || document;
-                        
-                        // SADECE aktif takvimin (k-other-month olmayan), devre dışı olmayan hücrelerini tara
-                        var cells = activeCal.querySelectorAll(
-                            "td[role='gridcell']:not(.k-other-month):not(.k-state-disabled) .k-link"
-                        );
-                        
-                        var processedCells = [];
-                        
-                        for (var i = 0; i < cells.length; i++) {
-                            var link = cells[i];
-                            var txt = link.textContent.trim();
-                            
-                            var r = link.getBoundingClientRect();
-                            var bg = window.getComputedStyle(link).backgroundColor;
-                            
-                            if (txt === day_num) {
-                                processedCells.push(txt + (r.width>0?'(VIS)':'(HID)') + '[' + bg + ']');
-                                
-                                // Boyut 0 ise atla
-                                if (r.width <= 0 || r.height <= 0) continue;
-                                
-                                var nums = bg.match(/[0-9]+/g);
-                                if (!nums || nums.length < 3) continue;
-                                var R = parseInt(nums[0]), G = parseInt(nums[1]), B = parseInt(nums[2]);
-                                
-                                // Yeşil renk: G > 100 VE G > R'nin 2 katı
-                                if (G <= 100 || G <= R * 2) continue;
-                                
-                                // TIKLA: jQuery trigger
-                                link.scrollIntoView({block: 'center', behavior: 'instant'});
-                                if (typeof $ !== 'undefined') {
-                                    $(link).trigger('click');
-                                    return 'OK:' + txt + ':' + bg;
-                                } else {
-                                    link.parentElement.click();
-                                    return 'TD_CLICK:' + txt;
-                                }
-                            }
-                        }
-                        
-                        return 'NOT_FOUND|cells=' + processedCells.join(',');
-                    """, str(day_num))
-                    
-                    self._log(logging.INFO, f"  [CAL] click_result: {click_result}")
-                    
-                    if not click_result or str(click_result).startswith('NOT_FOUND'):
-                        self._log(logging.ERROR, f"  [CAL] Gun '{day_num}' bulunamadi. Debug: {click_result}")
-                        return False
-                    
-                    self._log(logging.INFO, f"  [CAL] Tarihe basarıyla tiklandi: {click_result}")
-                    
-                    date_clicked = True   # Tarih başarıyla seçildi
-                    slot_selected = False  # Sıfırla (önemli, önceki değer olabilir)
-                    
-                    # ─── ADIM 4: AJAX'IN BİTMESİNİ BEKLE ─────────────────────────────
-                    # blockUI spinner kaybolunca AJAX tamamdır - time.sleep değil, WebDriverWait!
-                    self._log(logging.INFO, "  [CAL] AJAX spinner'i bekleniyor...")
-                    
-                    # SPINNER YAKALAMA HATASI DÜZELTME:
-                    # Tarihe tıkladıktan sonra sitenin "Yükleniyor" ekranını çıkarması bazen 1 sn sürüyor.
-                    # Eğer beklemeden invisibility (Görünmez mi?) diye sorarsak Selenium "Evet henüz ekranda yok!" deyip anında geçer.
-                    time.sleep(1.5) 
-                    
-                    try:
-                        WebDriverWait(self.driver, 15).until(
-                            EC.invisibility_of_element_located((By.CSS_SELECTOR, ".blockUI.blockOverlay"))
-                        )
-                    except Exception:
-                        self._log(logging.WARNING, "  [CAL] Spinner 15s'de kaybolmadi, devam ediliyor.")
-                    
-                    # DOM'un settle olmasını bekle (AJAX sonrası render)
-                    try:
-                        WebDriverWait(self.driver, 5).until(
-                            EC.presence_of_element_located((By.CSS_SELECTOR, "[id*='Slot'], #ddlAppointmentSlot, select"))
-                        )
-                    except Exception:
-                        time.sleep(1.5)
-                                
-
-                    # 5. Saat Seçimi - Önce AJAX'ın bitmesini ve slotların yüklenmesini bekle
-                    self._log(logging.INFO, "  [SLOT] Tarih seçimi sonrası saat slotlarının yüklenmesi bekleniyor...")
-                    
-                    time.sleep(1.0) # Yukarıdaki delay yetmemiş olabilir diye ekstra güvenlik
-                    
-                    # Loading spinner kaybolunca AJAX bitti
-                    try:
-                        WebDriverWait(self.driver, 15).until(
-                            EC.invisibility_of_element_located((By.CSS_SELECTOR, ".blockUI.blockOverlay, .k-loading-mask"))
-                        )
-                    except Exception:
-                        pass
-                    
-                    # '--Select--' dropdown'unun görünmesini bekle (slotlar yüklendi)
-                    try:
-                        WebDriverWait(self.driver, 10).until(
-                            lambda d: d.execute_script("""
-                                function isVis(el){var c=el;while(c){var s=window.getComputedStyle(c);
-                                if(s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)===0)return false;
-                                c=c.parentElement;}return true;}
-                                return Array.from(document.querySelectorAll('span,div'))
-                                    .some(el=>el.textContent.trim()==='--Select--'&&isVis(el));
-                            """)
-                        )
-                        self._log(logging.INFO, "  [SLOT] Saat dropdown'u hazır!")
-                    except Exception:
-                        self._log(logging.WARNING, "  [SLOT] 10s içinde --Select-- bulunamadı, yine de devam ediliyor...")
-                    
-                    time.sleep(2.5)  # DOM animasyon + AJAX sonrası render settle süresi
-                    
-                    self._log(logging.INFO, "  [SLOT] Saat dropdown'u açılıyor...")
-                    
-                    # ADIM 5a: Dropdown'u aç (--Select-- span/div'e tıkla)
-                    opened_dropdown = self.driver.execute_script("""
-                        function isReal(el) {
-                            var r = el.getBoundingClientRect();
-                            if (r.width <= 0 || r.height <= 0) return false;
-                            // Sadece tamamen ekran dışına taşınmış (sol negatif = honeypot) engelle
-                            if (r.right < -50) return false;
-                            var c = el;
-                            while (c) {
-                                var s = window.getComputedStyle(c);
-                                if (s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)===0) return false;
-                                c = c.parentElement;
-                            }
-                            return true;
-                        }
-                        // Dropdown'u viewport'a getir (sayfa altında olabilir)
-                        var anyDd = document.querySelector('.k-dropdown .k-dropdown-wrap, .k-widget.k-dropdown');
-                        if (anyDd) anyDd.scrollIntoView({block: 'center', behavior: 'instant'});
-                        // Kendo DropDownList için .k-dropdown-wrap veya --Select-- içeren span'ı bul
-                        var dropdown = Array.from(document.querySelectorAll(
-                            '.k-dropdown .k-dropdown-wrap, .k-widget.k-dropdown'
-                        )).find(isReal);
-                        if (dropdown) {
-                            if (typeof $ !== 'undefined') { $(dropdown).trigger('click'); }
-                            else { dropdown.click(); }
-                            return 'opened:dropdown-wrap';
-                        }
-                        // Fallback: --Select-- metnini içeren görünür öğe
-                        var sel = Array.from(document.querySelectorAll('span, div')).find(
-                            el => el.textContent.trim() === '--Select--' && isReal(el)
-                        );
-                        if (sel) {
-                            if (typeof $ !== 'undefined') { $(sel).trigger('click'); }
-                            else { sel.click(); }
-                            return 'opened:select-text';
-                        }
-                        return 'NOT_FOUND';
-                    """)
-                    
-                    self._log(logging.INFO, f"  [SLOT] Dropdown acildi: {opened_dropdown}")
-                    
-                    if not opened_dropdown or opened_dropdown == 'NOT_FOUND':
-                        self._log(logging.WARNING, "  [SLOT] Dropdown bulunamadi!")
-                        slot_selected = False
-                    else:
-                        # ADIM 5b: Seçeneklerin görünmesini ve animasyonun bitmesini bekle
-                        # Kendo UI, dropdown'u açarken bir animasyon container kullanır. 
-                        # Animasyon bitmeden tıklarsak, widget state bozulur ve sayfa takılır.
-                        self._log(logging.INFO, "  [SLOT] Dropdown animasyonunun ve AJAX'in tamamlanmasi bekleniyor...")
-                        
-                        try:
-                            # .k-animation-container div'inin gorunur duruma gelmesini bekliyoruz
-                            WebDriverWait(self.driver, 5).until(
-                                lambda d: d.execute_script("""
-                                    var containers = document.querySelectorAll('.k-animation-container');
-                                    for(var i=0; i<containers.length; i++) {
-                                        var style = window.getComputedStyle(containers[i]);
-                                        // Animasyon suresi bitince overflow:visible veya hidden gibi state degisikliklerine oturur
-                                        // Biz sadece container'in display:block ve opacity > 0 oldugundan emin oluyoruz
-                                        if(style.display !== 'none' && parseFloat(style.opacity) > 0) {
-                                            return true;
-                                        }
-                                    }
-                                    return false;
-                                """)
-                            )
-                        except Exception:
-                            self._log(logging.WARNING, "  [SLOT] Animasyon container timeout, devam ediliyor.")
-                            time.sleep(1) # Fallback DOM settling
-                        
-                        # ADIM 5c: İlk geçerli saat seçeneğini Deterministic JS ile seç
-                        # Ekranda acik olan popup'in icindeki listeyi bulmak icin 
-                        # butun options'lari tarayip, honeypot viewport kontrolleri YERINE
-                        # popup parentinin gorunurlugune bakacagiz (cunku popup fold disinda olabilir).
-                        slot_selected = self.driver.execute_script("""
-                            function isNodeTrueVisible(el) {
+                if not cal_open:
+                    # Görünür takvim ikonunu bul ve tıkla
+                    # Takvimin gerçekten acildigini garanti altina almak icin retry mekanizmasi
+                    cal_opened_successfully = False
+                    for cal_try in range(3):
+                        opened = self.driver.execute_script("""
+                            function isReal(el) {
+                                if (!el) return false;
                                 var r = el.getBoundingClientRect();
                                 if (r.width <= 0 || r.height <= 0) return false;
-                                // Popup'lar viewport disina tasabilir, o yuzden r.top > H kullanmiyoruz.
-                                // Sadece gercekten gizlenmis veya "left:-9999px" olanlari eliyoruz.
                                 if (r.right < -50) return false;
                                 var c = el;
                                 while (c) {
@@ -1889,107 +1543,458 @@ class BLSScraper:
                                 return true;
                             }
                             
-                            // Acik popup olan listbox'lari (k-list-container) bul
-                            var activeLists = Array.from(document.querySelectorAll('.k-animation-container .k-list-container, .k-widget.k-listbox'))
-                                .filter(isNodeTrueVisible);
+                            // 1) Takvim zaten acik mi?
+                            var openCals = Array.from(document.querySelectorAll('.k-animation-container .k-calendar-container, .k-calendar-container.k-state-border-down'))
+                                .filter(isReal);
+                            if (openCals.length > 0) return 'ALREADY_OPEN';
                             
-                            if (activeLists.length === 0) {
-                                return 'NO_OPEN_POPUP';
+                            // 2) Acik degilse butonu bul ve tikla
+                            var icon = Array.from(document.querySelectorAll(
+                                'span.k-icon.k-i-calendar, .k-datepicker .k-select, .k-picker-wrap .k-select'
+                            )).find(isReal);
+                            
+                            if (icon) {
+                                icon.scrollIntoView({block: 'center', behavior: 'instant'});
+                                if (typeof $ !== 'undefined') { $(icon).trigger('click'); }
+                                else { icon.click(); }
+                                return 'CLICKED_ICON';
                             }
                             
-                            var activeList = activeLists[0];
-                            // '--Select--' harici, sadece YESIL (bos) olan tum optionlari bul
-                            var options = Array.from(activeList.querySelectorAll('li[role="option"]')).filter(function(li) {
-                                var t = li.textContent.trim();
-                                if (t === '--Select--' || t === '' || li.classList.contains('k-state-disabled') || !isNodeTrueVisible(li)) return false;
-                                
-                                // Kirmizi/dolu slotlari secme hatasini onlemek icin background rengine bak:
-                                // Option icinde div varsa onun rengine, yoksa li'nin rengine bakilir
-                                var colorNode = li.querySelector('div') || li;
-                                var bg = window.getComputedStyle(colorNode).backgroundColor;
-                                var nums = bg.match(/[0-9]+/g);
-                                
-                                if (nums && nums.length >= 3) {
-                                    var R = parseInt(nums[0]), G = parseInt(nums[1]), B = parseInt(nums[2]);
-                                    
-                                    // SADECE Gorkemli Yesil (G > 100 ve G > R'nin 1.25 kati) ise musaittir.
-                                    // Kirmizi (R > 200) veya Sari (R>200, G>200) dolar.
-                                    // Eger saydam degilse (R=0,G=0,B=0,A=0), kirmizi atla
-                                    if (R !== 0 || G !== 0 || B !== 0) {
-                                        if (G <= 100 || G <= R * 1.25) return false;
-                                    }
-                                }
-                                return true;
-                            });
-                            
-                            if (options.length > 0) {
-                                var opt = options[0];
-                                // Ilgili dropdown objesini Kendo API uzerinden tetiklemek daha saglikli
-                                // ama once UI uzerinden tiklayacagiz. jQuery'nin trigger click'i kendo eventlerini dogru baglar.
-                                opt.scrollIntoView({block: 'nearest', behavior: 'instant'});
-                                if (typeof $ !== 'undefined') { $(opt).trigger('click'); }
-                                else { opt.click(); }
-                                return 'SELECTED:' + opt.textContent.trim();
+                            // Fallback: input'a tikla
+                            var input = Array.from(document.querySelectorAll('input[data-role="datepicker"]')).find(isReal);
+                            if (input) {
+                                input.scrollIntoView({block: 'center', behavior: 'instant'});
+                                if (typeof $ !== 'undefined') { $(input).trigger('click'); }
+                                else { input.click(); }
+                                return 'CLICKED_INPUT';
                             }
                             
-                            // Debug: mevcut li'leri dondur
-                            return 'NO_VALID_OPTIONS|tot=' + activeList.querySelectorAll('li').length;
+                            return 'NOT_FOUND';
                         """)
                         
-                        if isinstance(slot_selected, str) and slot_selected.startswith('SELECTED'):
-                            self._log(logging.INFO, f"  [SLOT] Saat basariyla secildi: {slot_selected}")
-                            slot_selected = True
-                            # Kendo UI'ın slot seçimini kaydetmesi için gölge eventleri tetikleyelim
-                            self.driver.execute_script("""
-                                try {
-                                    var dd = document.querySelector('select#ddlAppointmentSlot, input#ddlAppointmentSlot');
-                                    if(dd && typeof $ !== 'undefined') { $(dd).trigger('change'); }
-                                } catch(e){}
-                            """)
-                        else:
-                            self._log(logging.WARNING, f"  [SLOT] Saat secilemedi. Debug sonucu: {slot_selected}")
-                            slot_selected = False
-
-                    
-                    # Submit butonuna basmadan önce UI'ın seçimi sindirmesi için 3 saniye bekle
-                    time.sleep(3)
-                    
-                    if date_clicked and slot_selected:
-                        self._log(logging.INFO, "  >> Submit (Onayla) tuşuna Python üzerinden basılıyor.")
+                        if opened == 'NOT_FOUND':
+                            self._log(logging.ERROR, "  [CAL] Takvim ikonu veya input'u bulunamadi!")
+                            break
                         
-                        # Sadece gorunur olan Submit butonunu bul (Honeypot korumasi JS Treewalk)
-                        js_submit = """
-                            function isVisible(el) {
-                                var curr = el;
-                                while (curr) {
-                                    var style = window.getComputedStyle(curr);
-                                    if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) return false;
-                                    curr = curr.parentElement;
+                        if opened == 'ALREADY_OPEN':
+                            cal_opened_successfully = True
+                            break
+                        
+                        # Tikladik, simdi gercekten acilmasini bekle
+                        try:
+                            WebDriverWait(self.driver, 3).until(
+                                lambda d: d.execute_script("""
+                                    var cals = document.querySelectorAll('.k-animation-container .k-calendar-container, .k-calendar-container.k-state-border-down');
+                                    for(var i=0; i<cals.length; i++){
+                                        var style = window.getComputedStyle(cals[i].parentElement || cals[i]);
+                                        if (style.display !== 'none' && parseFloat(style.opacity) > 0) return true;
+                                    }
+                                    return false;
+                                """)
+                            )
+                            cal_opened_successfully = True
+                            break # Basariyla acildi
+                        except Exception:
+                            self._log(logging.WARNING, f"  [CAL] Takvim acilisi gozlemlenemedi (deneme {cal_try+1}/3), tekrar tiklaniyor...")
+                            time.sleep(0.5)
+                    
+                    if not cal_opened_successfully:
+                       self._log(logging.ERROR, "  [CAL] Takvim pop-up'i acilamadi, islem iptal.")
+                       return False
+                    
+                    # Takvimi viewport'a getir (sayfa altında açılmış olabilir!)
+                    self.driver.execute_script("""
+                        var cal = document.querySelector('.k-animation-container .k-calendar-container, .k-calendar-container');
+                        if (cal) cal.scrollIntoView({block: 'center', behavior: 'instant'});
+                    """)
+                    time.sleep(1.0) # Settle suresi
+                
+                # ─── ADIM 2: DOĞRU AYA GİT ────────────────────────────────────────
+                if target_month:
+                    self._log(logging.INFO, f"  [CAL] Adim 2/3: '{target_month}' ayina gidiliyor...")
+                    for nav_attempt in range(18):  # Max 18 ay ileri
+                        # Görünür takvim başlığını oku
+                        title_text = self.driver.execute_script("""
+                            var activeCal = document.querySelector('.k-animation-container .k-calendar-container, .k-calendar-container.k-state-border-down') || document;
+                            var cands = activeCal.querySelectorAll(
+                                '.k-nav-fast, .k-calendar-header .k-title, .k-calendar .k-header .k-title'
+                            );
+                            for (var i = 0; i < cands.length; i++) {
+                                var r = cands[i].getBoundingClientRect();
+                                if (r.width > 0 && r.height > 0) return cands[i].innerText || '';
+                            }
+                            return '';
+                        """) or ""
+                        
+                        self._log(logging.DEBUG, f"    [NAV] Mevcut ay: '{title_text.strip()}' | Hedef: '{target_month}'")
+                        
+                        # title_text = "March 2026" ve target_month = "March 2026" şeklinde olmalı
+                        # Ayın adını ve yılını karşılaştır (büyük/küçük harf duyarsız)
+                        target_parts = target_month.lower().split()
+                        title_lower = title_text.lower()
+                        if all(p in title_lower for p in target_parts):
+                            self._log(logging.INFO, f"  [CAL] Dogru ayda: '{title_text.strip()}'")
+                            break
+                        
+                        # Görünür Next butonunu bul ve tıkla
+                        next_ok = self.driver.execute_script("""
+                            function isReal(el) {
+                                var r = el.getBoundingClientRect();
+                                if (r.width <= 0 || r.height <= 0) return false;
+                                if (r.right < -50) return false;
+                                var c = el;
+                                while (c) {
+                                    var s = window.getComputedStyle(c);
+                                    if (s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)===0) return false;
+                                    c = c.parentElement;
                                 }
                                 return true;
                             }
-                            var submitBtn = document.querySelector('#btnSubmit, input[value="Submit"], input[type="submit"]');
-                            if (submitBtn && isVisible(submitBtn)) {
-                                submitBtn.click();
-                                return true;
+                            var activeCal = document.querySelector('.k-animation-container .k-calendar-container, .k-calendar-container.k-state-border-down') || document;
+                            var btn = Array.from(activeCal.querySelectorAll(
+                                '.k-nav-next, .k-calendar-nav-next, [aria-label="Next"]'
+                            )).find(isReal);
+                            if (btn) {
+                                btn.scrollIntoView({block: 'center', behavior: 'instant'});
+                                btn.click(); 
+                                return true; 
                             }
                             return false;
-                        """
-                        submit_success = self.driver.execute_script(js_submit)
-                        if submit_success:
-                             self._log(logging.INFO, "  >> Submit tuşuna başarıyla NATIVE JS ile tıklandı.")
-                        else:
-                             self._log(logging.ERROR, "  >> [KRİTİK NATIVE HATA] Görünür bir 'Submit' tuşu bulunamadı (Honeypot müdahalesi?).")
+                        """)
+                        
+                        if not next_ok:
+                            self._log(logging.WARNING, f"  [CAL] 'Sonraki Ay' butonu bulunamadi (deneme {nav_attempt+1}), yeniden deneniyor...")
+                            time.sleep(0.5)
+                            continue  # break değil continue: takvim yeniden render olmuş olabilir
+                        
+                        # Ay değişiminin DOM'a yansımasını bekle
+                        try:
+                            WebDriverWait(self.driver, 4).until(
+                                EC.staleness_of(self.driver.find_element(By.CSS_SELECTOR, "table[role='grid']"))
+                            )
+                        except Exception:
+                            time.sleep(1.0)
+                    else:
+                        self._log(logging.WARNING, f"  [CAL] 18 denemede '{target_month}' ayina ulasılamadi!")
+                
+                # ─── ADIM 3: YEŞİL GÜNÜ BUL VE TIKLA ─────────────────────────────
+                # Anahtar: $(link).trigger('click') - Kendo'nun kendi event handler'ını çağırır.
+                # Bu, BLS sitesinde subagent tarafından KANITLANMIŞ tek çalışan yöntemdir.
+                self._log(logging.INFO, f"  [CAL] Adim 3/3: Takvimde gun '{day_num}' aranip jQuery trigger ile tiklaniyor...")
+                
+                # Takvim grid'inin güncel DOM'da olduğunu garantile
+                try:
+                    WebDriverWait(self.driver, 5).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "td[role='gridcell'] .k-link"))
+                    )
+                except Exception:
+                    pass
+                
+                click_result = self.driver.execute_script("""
+                    var day_num = arguments[0];
+                    var activeCal = document.querySelector('.k-animation-container .k-calendar-container, .k-calendar-container.k-state-border-down') || document;
                     
-                    time.sleep(4) # Submit sonrası diğer sayfaya geçiş için kilit bekleme
-                except Exception as e:
-                    self._log(logging.ERROR, f"  Takvim hatası: {e}")
-                    date_clicked = False
-                    slot_selected = False
+                    // SADECE aktif takvimin (k-other-month olmayan), devre dışı olmayan hücrelerini tara
+                    var cells = activeCal.querySelectorAll(
+                        "td[role='gridcell']:not(.k-other-month):not(.k-state-disabled) .k-link"
+                    );
                     
-                if not date_clicked or not slot_selected:
-                    self._log(logging.WARNING, "  Takvim/Zaman seçilemedi. İptal ediliyor")
+                    var processedCells = [];
+                    
+                    for (var i = 0; i < cells.length; i++) {
+                        var link = cells[i];
+                        var txt = link.textContent.trim();
+                        
+                        var r = link.getBoundingClientRect();
+                        var bg = window.getComputedStyle(link).backgroundColor;
+                        
+                        if (txt === day_num) {
+                            processedCells.push(txt + (r.width>0?'(VIS)':'(HID)') + '[' + bg + ']');
+                            
+                            // Boyut 0 ise atla
+                            if (r.width <= 0 || r.height <= 0) continue;
+                            
+                            var nums = bg.match(/[0-9]+/g);
+                            if (!nums || nums.length < 3) continue;
+                            var R = parseInt(nums[0]), G = parseInt(nums[1]), B = parseInt(nums[2]);
+                            
+                            // Yeşil renk: G > 100 VE G > R'nin 2 katı
+                            if (G <= 100 || G <= R * 2) continue;
+                            
+                            // TIKLA: jQuery trigger
+                            link.scrollIntoView({block: 'center', behavior: 'instant'});
+                            if (typeof $ !== 'undefined') {
+                                $(link).trigger('click');
+                                return 'OK:' + txt + ':' + bg;
+                            } else {
+                                link.parentElement.click();
+                                return 'TD_CLICK:' + txt;
+                            }
+                        }
+                    }
+                    
+                    return 'NOT_FOUND|cells=' + processedCells.join(',');
+                """, str(day_num))
+                
+                self._log(logging.INFO, f"  [CAL] click_result: {click_result}")
+                
+                if not click_result or str(click_result).startswith('NOT_FOUND'):
+                    self._log(logging.ERROR, f"  [CAL] Gun '{day_num}' bulunamadi. Debug: {click_result}")
                     return False
+                
+                self._log(logging.INFO, f"  [CAL] Tarihe basarıyla tiklandi: {click_result}")
+                
+                date_clicked = True   # Tarih başarıyla seçildi
+                slot_selected = False  # Sıfırla (önemli, önceki değer olabilir)
+                
+                # ─── ADIM 4: AJAX'IN BİTMESİNİ BEKLE ─────────────────────────────
+                # blockUI spinner kaybolunca AJAX tamamdır - time.sleep değil, WebDriverWait!
+                self._log(logging.INFO, "  [CAL] AJAX spinner'i bekleniyor...")
+                
+                # SPINNER YAKALAMA HATASI DÜZELTME:
+                # Tarihe tıkladıktan sonra sitenin "Yükleniyor" ekranını çıkarması bazen 1 sn sürüyor.
+                # Eğer beklemeden invisibility (Görünmez mi?) diye sorarsak Selenium "Evet henüz ekranda yok!" deyip anında geçer.
+                time.sleep(1.5) 
+                
+                try:
+                    WebDriverWait(self.driver, 15).until(
+                        EC.invisibility_of_element_located((By.CSS_SELECTOR, ".blockUI.blockOverlay"))
+                    )
+                except Exception:
+                    self._log(logging.WARNING, "  [CAL] Spinner 15s'de kaybolmadi, devam ediliyor.")
+                
+                # DOM'un settle olmasını bekle (AJAX sonrası render)
+                try:
+                    WebDriverWait(self.driver, 5).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "[id*='Slot'], #ddlAppointmentSlot, select"))
+                    )
+                except Exception:
+                    time.sleep(1.5)
+                            
+
+                # 5. Saat Seçimi - Önce AJAX'ın bitmesini ve slotların yüklenmesini bekle
+                self._log(logging.INFO, "  [SLOT] Tarih seçimi sonrası saat slotlarının yüklenmesi bekleniyor...")
+                
+                time.sleep(1.0) # Yukarıdaki delay yetmemiş olabilir diye ekstra güvenlik
+                
+                # Loading spinner kaybolunca AJAX bitti
+                try:
+                    WebDriverWait(self.driver, 15).until(
+                        EC.invisibility_of_element_located((By.CSS_SELECTOR, ".blockUI.blockOverlay, .k-loading-mask"))
+                    )
+                except Exception:
+                    pass
+                
+                # '--Select--' dropdown'unun görünmesini bekle (slotlar yüklendi)
+                try:
+                    WebDriverWait(self.driver, 10).until(
+                        lambda d: d.execute_script("""
+                            function isVis(el){var c=el;while(c){var s=window.getComputedStyle(c);
+                            if(s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)===0)return false;
+                            c=c.parentElement;}return true;}
+                            return Array.from(document.querySelectorAll('span,div'))
+                                .some(el=>el.textContent.trim()==='--Select--'&&isVis(el));
+                        """)
+                    )
+                    self._log(logging.INFO, "  [SLOT] Saat dropdown'u hazır!")
+                except Exception:
+                    self._log(logging.WARNING, "  [SLOT] 10s içinde --Select-- bulunamadı, yine de devam ediliyor...")
+                
+                time.sleep(2.5)  # DOM animasyon + AJAX sonrası render settle süresi
+                
+                self._log(logging.INFO, "  [SLOT] Saat dropdown'u açılıyor...")
+                
+                # ADIM 5a: Dropdown'u aç (--Select-- span/div'e tıkla)
+                opened_dropdown = self.driver.execute_script("""
+                    function isReal(el) {
+                        var r = el.getBoundingClientRect();
+                        if (r.width <= 0 || r.height <= 0) return false;
+                        // Sadece tamamen ekran dışına taşınmış (sol negatif = honeypot) engelle
+                        if (r.right < -50) return false;
+                        var c = el;
+                        while (c) {
+                            var s = window.getComputedStyle(c);
+                            if (s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)===0) return false;
+                            c = c.parentElement;
+                        }
+                        return true;
+                    }
+                    // Dropdown'u viewport'a getir (sayfa altında olabilir)
+                    var anyDd = document.querySelector('.k-dropdown .k-dropdown-wrap, .k-widget.k-dropdown');
+                    if (anyDd) anyDd.scrollIntoView({block: 'center', behavior: 'instant'});
+                    // Kendo DropDownList için .k-dropdown-wrap veya --Select-- içeren span'ı bul
+                    var dropdown = Array.from(document.querySelectorAll(
+                        '.k-dropdown .k-dropdown-wrap, .k-widget.k-dropdown'
+                    )).find(isReal);
+                    if (dropdown) {
+                        if (typeof $ !== 'undefined') { $(dropdown).trigger('click'); }
+                        else { dropdown.click(); }
+                        return 'opened:dropdown-wrap';
+                    }
+                    // Fallback: --Select-- metnini içeren görünür öğe
+                    var sel = Array.from(document.querySelectorAll('span, div')).find(
+                        el => el.textContent.trim() === '--Select--' && isReal(el)
+                    );
+                    if (sel) {
+                        if (typeof $ !== 'undefined') { $(sel).trigger('click'); }
+                        else { sel.click(); }
+                        return 'opened:select-text';
+                    }
+                    return 'NOT_FOUND';
+                """)
+                
+                self._log(logging.INFO, f"  [SLOT] Dropdown acildi: {opened_dropdown}")
+                
+                if not opened_dropdown or opened_dropdown == 'NOT_FOUND':
+                    self._log(logging.WARNING, "  [SLOT] Dropdown bulunamadi!")
+                    slot_selected = False
+                else:
+                    # ADIM 5b: Seçeneklerin görünmesini ve animasyonun bitmesini bekle
+                    # Kendo UI, dropdown'u açarken bir animasyon container kullanır. 
+                    # Animasyon bitmeden tıklarsak, widget state bozulur ve sayfa takılır.
+                    self._log(logging.INFO, "  [SLOT] Dropdown animasyonunun ve AJAX'in tamamlanmasi bekleniyor...")
+                    
+                    try:
+                        # .k-animation-container div'inin gorunur duruma gelmesini bekliyoruz
+                        WebDriverWait(self.driver, 5).until(
+                            lambda d: d.execute_script("""
+                                var containers = document.querySelectorAll('.k-animation-container');
+                                for(var i=0; i<containers.length; i++) {
+                                    var style = window.getComputedStyle(containers[i]);
+                                    // Animasyon suresi bitince overflow:visible veya hidden gibi state degisikliklerine oturur
+                                    // Biz sadece container'in display:block ve opacity > 0 oldugundan emin oluyoruz
+                                    if(style.display !== 'none' && parseFloat(style.opacity) > 0) {
+                                        return true;
+                                    }
+                                }
+                                return false;
+                            """)
+                        )
+                    except Exception:
+                        self._log(logging.WARNING, "  [SLOT] Animasyon container timeout, devam ediliyor.")
+                        time.sleep(1) # Fallback DOM settling
+                    
+                    # ADIM 5c: İlk geçerli saat seçeneğini Deterministic JS ile seç
+                    # Ekranda acik olan popup'in icindeki listeyi bulmak icin 
+                    # butun options'lari tarayip, honeypot viewport kontrolleri YERINE
+                    # popup parentinin gorunurlugune bakacagiz (cunku popup fold disinda olabilir).
+                    slot_selected = self.driver.execute_script("""
+                        function isNodeTrueVisible(el) {
+                            var r = el.getBoundingClientRect();
+                            if (r.width <= 0 || r.height <= 0) return false;
+                            // Popup'lar viewport disina tasabilir, o yuzden r.top > H kullanmiyoruz.
+                            // Sadece gercekten gizlenmis veya "left:-9999px" olanlari eliyoruz.
+                            if (r.right < -50) return false;
+                            var c = el;
+                            while (c) {
+                                var s = window.getComputedStyle(c);
+                                if (s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)===0) return false;
+                                c = c.parentElement;
+                            }
+                            return true;
+                        }
+                        
+                        // Acik popup olan listbox'lari (k-list-container) bul
+                        var activeLists = Array.from(document.querySelectorAll('.k-animation-container .k-list-container, .k-widget.k-listbox'))
+                            .filter(isNodeTrueVisible);
+                        
+                        if (activeLists.length === 0) {
+                            return 'NO_OPEN_POPUP';
+                        }
+                        
+                        var activeList = activeLists[0];
+                        // '--Select--' harici, sadece YESIL (bos) olan tum optionlari bul
+                        var options = Array.from(activeList.querySelectorAll('li[role="option"]')).filter(function(li) {
+                            var t = li.textContent.trim();
+                            if (t === '--Select--' || t === '' || li.classList.contains('k-state-disabled') || !isNodeTrueVisible(li)) return false;
+                            
+                            // Kirmizi/dolu slotlari secme hatasini onlemek icin background rengine bak:
+                            // Option icinde div varsa onun rengine, yoksa li'nin rengine bakilir
+                            var colorNode = li.querySelector('div') || li;
+                            var bg = window.getComputedStyle(colorNode).backgroundColor;
+                            var nums = bg.match(/[0-9]+/g);
+                            
+                            if (nums && nums.length >= 3) {
+                                var R = parseInt(nums[0]), G = parseInt(nums[1]), B = parseInt(nums[2]);
+                                
+                                // SADECE Gorkemli Yesil (G > 100 ve G > R'nin 1.25 kati) ise musaittir.
+                                // Kirmizi (R > 200) veya Sari (R>200, G>200) dolar.
+                                // Eger saydam degilse (R=0,G=0,B=0,A=0), kirmizi atla
+                                if (R !== 0 || G !== 0 || B !== 0) {
+                                    if (G <= 100 || G <= R * 1.25) return false;
+                                }
+                            }
+                            return true;
+                        });
+                        
+                        if (options.length > 0) {
+                            var opt = options[0];
+                            // Ilgili dropdown objesini Kendo API uzerinden tetiklemek daha saglikli
+                            // ama once UI uzerinden tiklayacagiz. jQuery'nin trigger click'i kendo eventlerini dogru baglar.
+                            opt.scrollIntoView({block: 'nearest', behavior: 'instant'});
+                            if (typeof $ !== 'undefined') { $(opt).trigger('click'); }
+                            else { opt.click(); }
+                            return 'SELECTED:' + opt.textContent.trim();
+                        }
+                        
+                        // Debug: mevcut li'leri dondur
+                        return 'NO_VALID_OPTIONS|tot=' + activeList.querySelectorAll('li').length;
+                    """)
+                    
+                    if isinstance(slot_selected, str) and slot_selected.startswith('SELECTED'):
+                        self._log(logging.INFO, f"  [SLOT] Saat basariyla secildi: {slot_selected}")
+                        slot_selected = True
+                        # Kendo UI'ın slot seçimini kaydetmesi için gölge eventleri tetikleyelim
+                        self.driver.execute_script("""
+                            try {
+                                var dd = document.querySelector('select#ddlAppointmentSlot, input#ddlAppointmentSlot');
+                                if(dd && typeof $ !== 'undefined') { $(dd).trigger('change'); }
+                            } catch(e){}
+                        """)
+                    else:
+                        self._log(logging.WARNING, f"  [SLOT] Saat secilemedi. Debug sonucu: {slot_selected}")
+                        slot_selected = False
+
+                
+                # Submit butonuna basmadan önce UI'ın seçimi sindirmesi için 3 saniye bekle
+                time.sleep(3)
+                
+                if date_clicked and slot_selected:
+                    self._log(logging.INFO, "  >> Submit (Onayla) tuşuna Python üzerinden basılıyor.")
+                    
+                    # Sadece gorunur olan Submit butonunu bul (Honeypot korumasi JS Treewalk)
+                    js_submit = """
+                        function isVisible(el) {
+                            var curr = el;
+                            while (curr) {
+                                var style = window.getComputedStyle(curr);
+                                if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) return false;
+                                curr = curr.parentElement;
+                            }
+                            return true;
+                        }
+                        var submitBtn = document.querySelector('#btnSubmit, input[value="Submit"], input[type="submit"]');
+                        if (submitBtn && isVisible(submitBtn)) {
+                            submitBtn.click();
+                            return true;
+                        }
+                        return false;
+                    """
+                    submit_success = self.driver.execute_script(js_submit)
+                    if submit_success:
+                         self._log(logging.INFO, "  >> Submit tuşuna başarıyla NATIVE JS ile tıklandı.")
+                    else:
+                         self._log(logging.ERROR, "  >> [KRİTİK NATIVE HATA] Görünür bir 'Submit' tuşu bulunamadı (Honeypot müdahalesi?).")
+                
+                time.sleep(4) # Submit sonrası diğer sayfaya geçiş için kilit bekleme
+            except Exception as e:
+                self._log(logging.ERROR, f"  Takvim hatası: {e}")
+                date_clicked = False
+                slot_selected = False
+                
+            if not date_clicked or not slot_selected:
+                self._log(logging.WARNING, "  Takvim/Zaman seçilemedi. İptal ediliyor")
+                return False
 
             # --- 4) Applicant Selection / Travel Details / Photo Upload / OTP ---
             current_url = self.driver.current_url

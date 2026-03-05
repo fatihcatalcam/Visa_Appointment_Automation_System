@@ -926,171 +926,153 @@ class BLSScraper:
                 if not text: return ""
                 text = text.replace("İ", "i").replace("I", "ı").lower()
                 return text.strip()
-            def select2_pick(search_value: str, step_name: str) -> bool:
-                """Açık listeden seçim yapar (Standart + Generic LI Fallback)"""
-                try:
-                    # Arama kutusu
-                    try:
-                        sb = self.driver.find_element(By.CSS_SELECTOR, ".select2-search__field")
-                        sb.clear()
-                        sb.send_keys(search_value)
-                        time.sleep(0.3)
-                    except: pass
-                    search_norm = normalize_tr(search_value)
-                    # A. Standart
-                    opts = self.driver.find_elements(By.CSS_SELECTOR, ".select2-results__option:not(.select2-results__option--disabled)")
-                    visible = [o for o in opts if o.is_displayed()]
-                    if visible:
-                        opts_text = [o.text.strip() for o in visible[:5]]
-                        logger.info(f"  [DEBUG] {step_name} choices: {opts_text}")
-                        # Tam Eşleşme
-                        for o in visible:
-                            if normalize_tr(o.text) == search_norm:
-                                self.driver.execute_script("arguments[0].click();", o)
-                                logger.info(f"  Ã¢Å“â€œ {step_name}: {o.text} (Tam)")
-                                time.sleep(0.2)
-                                return True
-                        # Kısmi
-                        for o in visible:
-                            if search_norm in normalize_tr(o.text):
-                                self.driver.execute_script("arguments[0].click();", o)
-                                logger.info(f"  Ã¢Å“â€œ {step_name}: {o.text} (Kısmi)")
-                                time.sleep(0.2)
-                                return True
-                    # B. Generic Li Fallback
-                    logger.info(f"  [DEBUG] {step_name}: Standart yok, genel LI aranıyor...")
-                    all_lis = self.driver.find_elements(By.TAG_NAME, "li")
-                    vis_lis = [li for li in all_lis if li.is_displayed() and li.text.strip()]
-                    for li in vis_lis:
-                        if search_norm in normalize_tr(li.text):
-                            self.driver.execute_script("arguments[0].click();", li)
-                            logger.info(f"  Ã¢Å“â€œ {step_name}: {li.text} (Fallback)")
-                            time.sleep(0.2)
-                            return True
-                    
-                    logger.warning(f"  {step_name}: '{search_value}' bulunamadı.")
-                    return False
-                except Exception as e:
-                    logger.debug(f"  select2_pick error: {e}")
-                return False
-            # Ã¢â€â‚¬Ã¢â€â‚¬ 2. Helper: Label Bazlı Tıklama (Hibrit: DOM + Koordinat) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-            def click_container_by_keywords(keywords: list) -> bool:
-                """
-                Verilen keyword'leri içeren Label'ı bul.
-                DOM ve Koordinat yöntemleri ile en uygun kutuyu seç.
-                """
-                try:
-                    # 1. Label Bul
-                    labels = self.driver.find_elements(By.TAG_NAME, "label")
-                    target = None
-                    for lbl in labels:
-                        if not lbl.is_displayed(): continue
-                        txt = lbl.text.lower()
-                        if any(k.lower() in txt for k in keywords):
-                            target = lbl
-                            break
-                    
-                    if not target:
-                        logger.warning(f"  Label bulunamadı: {keywords}")
-                        return False
-                    l_loc = target.location
-                    l_y = l_loc['y']
-                    best_container = None
-                    logger.info(f"  [DEBUG] Hedef Label: '{target.text}' Y={l_y}")
-                    # Ã¢â€â‚¬Ã¢â€â‚¬ STRATEJI A: Global Koordinat (Genişletilmiş) Ã¢â€â‚¬Ã¢â€â‚¬
-                    # Label'a fiziksel olarak en yakın olan kutucuğu seç (Çok daha hızlı ve güvenilir)
-                    logger.info("  Koordinat bazlı container araması yapılıyor...")
-                        
-                    # Daha geniş selector listesi (+ Kendo UI)
-                    selectors = [
-                        ".select2-selection", ".select2-selection--single", 
-                        "span.select2-container", "div.select2-container",
-                        "[class*='select2-selection']", "[class*='select2-container']",
-                        ".k-dropdown", ".k-input", "[role='listbox']",
-                        "select"
-                    ]
-                    all_cands = []
-                    for sel in selectors:
-                        all_cands.extend(self.driver.find_elements(By.CSS_SELECTOR, sel))
-                    
-                    # Analiz ve Filtreleme
-                    uniq_els = {el.id: el for el in all_cands}.values()
-                    valid_candidates = []
-                    
-                    for c in uniq_els:
-                        try:
-                            c_loc = c.location
-                            c_y = c_loc['y']
-                            visible = c.is_displayed()
-                            tag_name = c.tag_name
-                            cls_name = c.get_attribute("class")
-                            
-                            # Log (Commented out again)
-                            # logger.info(f"    [ADAY] Tag={tag_name} Class='{cls_name}' Y={c_y} Vis={visible}")
-                            if not visible: continue
-                            
-                            # Tolerans: -20px yukarı, +300px aşağı
-                            if c_y >= l_y - 20:
-                                dist = c_y - l_y
-                                if dist < 300:
-                                    valid_candidates.append((dist, c))
-                        except Exception as e:
-                            logger.debug(f"    [SKIP] Hata: {e}")
-                    
-                    if valid_candidates:
-                        valid_candidates.sort(key=lambda x: x[0])
-                        best_container = valid_candidates[0][1]
-                        logger.info(f"  Container bulundu (Coord Strategy) - Fark: {valid_candidates[0][0]}px")
-                    # Ã¢â€â‚¬Ã¢â€â‚¬ STRATEJI B: JS Element From Point (Viewport Coord) Ã¢â€â‚¬Ã¢â€â‚¬
-                    if not best_container:
-                        logger.info("  Selector Strategy başarısız, JS elementFromPoint (Viewport) deneniyor...")
-                        try:
-                            # Label'ı ekrana getir (Scroll)
-                            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", target)
-                            time.sleep(0.5)
-                            
-                            # Viewport koordinatlarını al
-                            rect = self.driver.execute_script("return arguments[0].getBoundingClientRect();", target)
-                            start_x = rect['x']
-                            start_y = rect['y'] + rect['height']
-                            
-                            logger.info(f"    [JS-Probe] Viewport Coords: Label Rect: {rect}")
-                            
-                            # Label'ın solundan 20px içeride, altından 15-35px aşağıda tara
-                            test_offsets = [15, 25, 35, 45] 
-                            
-                            for off in test_offsets:
-                                tx = start_x + 20
-                                ty = start_y + off
-                                el = self.driver.execute_script("return document.elementFromPoint(arguments[0], arguments[1]);", tx, ty)
-                                
-                                if el:
-                                    tag = el.tag_name.lower()
-                                    cls = el.get_attribute("class") or ""
-                                    logger.info(f"    [JS-Probe] ({tx},{ty}) -> <{tag} class='{cls}'>")
-                                    
-                                    if tag in ["html", "body", "form"]: continue
-                                    
-                                    best_container = el
-                                    break
-                        except Exception as e:
-                            logger.error(f"  JS Probe Error: {e}")
-                    if not best_container:
-                         logger.warning(f"  Container HİÇBİR YÖNTEMLE bulunamadı (Label: {keywords[0]})")
-                         return False
-                    # Tıkla
-                    self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", best_container)
-                    time.sleep(0.1)
-                    try:
-                        best_container.click()
-                    except:
-                        self.driver.execute_script("arguments[0].click();", best_container)
-                    
-                    time.sleep(0.2)
-                    return True
-                except Exception as e:
-                    logger.debug(f"  click_container error: {e}")
-                return False
+            def select2_pick(search_value: str, step_name: str) -> bool:
+                """Acik listeden secim yapar - TEK ATOMIK JS CAGRISI (50+ round-trip yerine 1)"""
+                try:
+                    search_norm = normalize_tr(search_value)
+                    result = self.driver.execute_script("""
+                        var searchNorm = arguments[0];
+                        
+                        function normTr(t) {
+                            if(!t) return '';
+                            return t.replace(/İ/g,'i').replace(/I/g,'ı').toLowerCase().trim();
+                        }
+                        
+                        var sb = document.querySelector('.select2-search__field');
+                        if(sb) {
+                            sb.value = arguments[1];
+                            sb.dispatchEvent(new Event('input', {bubbles:true}));
+                            sb.dispatchEvent(new Event('keyup', {bubbles:true}));
+                        }
+                        
+                        var opts = document.querySelectorAll('.select2-results__option:not(.select2-results__option--disabled)');
+                        
+                        for(var i=0; i<opts.length; i++) {
+                            if(opts[i].offsetWidth <= 0) continue;
+                            if(normTr(opts[i].textContent) === searchNorm) {
+                                opts[i].scrollIntoView({block:'nearest'});
+                                opts[i].click();
+                                return 'EXACT:' + opts[i].textContent.trim();
+                            }
+                        }
+                        
+                        for(var i=0; i<opts.length; i++) {
+                            if(opts[i].offsetWidth <= 0) continue;
+                            if(normTr(opts[i].textContent).indexOf(searchNorm) !== -1) {
+                                opts[i].scrollIntoView({block:'nearest'});
+                                opts[i].click();
+                                return 'PARTIAL:' + opts[i].textContent.trim();
+                            }
+                        }
+                        
+                        var allLis = document.querySelectorAll('li');
+                        for(var i=0; i<allLis.length; i++) {
+                            if(allLis[i].offsetWidth <= 0 || !allLis[i].textContent.trim()) continue;
+                            if(normTr(allLis[i].textContent).indexOf(searchNorm) !== -1) {
+                                allLis[i].scrollIntoView({block:'nearest'});
+                                allLis[i].click();
+                                return 'FALLBACK:' + allLis[i].textContent.trim();
+                            }
+                        }
+                        
+                        return null;
+                    """, search_norm, search_value)
+                    
+                    if result:
+                        logger.info(f"  \u2713 {step_name}: {result}")
+                        return True
+                    
+                    logger.warning(f"  {step_name}: '{search_value}' bulunamadi.")
+                    return False
+                except Exception as e:
+                    logger.debug(f"  select2_pick error: {e}")
+                return False
+
+            def click_container_by_keywords(keywords: list) -> bool:
+                """
+                Label'a en yakin dropdown container'i bulur ve tiklar.
+                TEK ATOMIK JS CAGRISI - 50+ Selenium round-trip yerine 1 cagri.
+                """
+                try:
+                    result = self.driver.execute_script("""
+                        var keywords = arguments[0];
+                        
+                        var labels = document.querySelectorAll('label');
+                        var target = null;
+                        for(var i=0; i<labels.length; i++) {
+                            if(labels[i].offsetWidth <= 0) continue;
+                            var txt = labels[i].textContent.toLowerCase();
+                            for(var k=0; k<keywords.length; k++) {
+                                if(txt.indexOf(keywords[k].toLowerCase()) !== -1) {
+                                    target = labels[i];
+                                    break;
+                                }
+                            }
+                            if(target) break;
+                        }
+                        
+                        if(!target) return 'LABEL_NOT_FOUND';
+                        
+                        var lY = target.getBoundingClientRect().top + window.scrollY;
+                        
+                        var selectors = [
+                            '.select2-selection', '.select2-selection--single',
+                            'span.select2-container', 'div.select2-container',
+                            '.k-dropdown', '.k-input', 'select'
+                        ];
+                        
+                        var best = null;
+                        var bestDist = 999;
+                        
+                        for(var s=0; s<selectors.length; s++) {
+                            var els = document.querySelectorAll(selectors[s]);
+                            for(var j=0; j<els.length; j++) {
+                                var el = els[j];
+                                if(el.offsetWidth <= 0) continue;
+                                var eY = el.getBoundingClientRect().top + window.scrollY;
+                                var dist = eY - lY;
+                                if(dist >= -20 && dist < 300 && dist < bestDist) {
+                                    bestDist = dist;
+                                    best = el;
+                                }
+                            }
+                        }
+                        
+                        if(!best) {
+                            target.scrollIntoView({block:'center', behavior:'instant'});
+                            var rect = target.getBoundingClientRect();
+                            var offsets = [15, 25, 35, 45];
+                            for(var o=0; o<offsets.length; o++) {
+                                var el = document.elementFromPoint(rect.x + 20, rect.y + rect.height + offsets[o]);
+                                if(el && el.tagName !== 'HTML' && el.tagName !== 'BODY' && el.tagName !== 'FORM') {
+                                    best = el;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if(!best) return 'CONTAINER_NOT_FOUND';
+                        
+                        best.scrollIntoView({block:'center', behavior:'instant'});
+                        if(typeof $ !== 'undefined') { $(best).trigger('click'); }
+                        else { best.click(); }
+                        
+                        return 'OK:' + bestDist + 'px';
+                    """, keywords)
+                    
+                    if result and str(result).startswith('OK'):
+                        logger.info(f"  Container tiklandi ({result})")
+                        return True
+                    
+                    if result == 'LABEL_NOT_FOUND':
+                        logger.warning(f"  Label bulunamadi: {keywords}")
+                    elif result == 'CONTAINER_NOT_FOUND':
+                        logger.warning(f"  Container bulunamadi (Label: {keywords[0]})")
+                    
+                    return False
+                except Exception as e:
+                    logger.debug(f"  click_container error: {e}")
+                return False
             # Ã¢â€â‚¬Ã¢â€â‚¬ 3. Step-by-Step Filling (with retry on label-not-found) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
             
             max_form_retries = 3

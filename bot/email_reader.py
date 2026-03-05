@@ -116,13 +116,13 @@ class OTPReader:
             self._mail.select("INBOX")
             
             # Son 10 maili kontrol et (en yeniden en eskiye)
-            # BLS gönderen adresi: noreply@blsspainglobal.com veya benzeri
+            # DİKKAT: UNSEEN kullanmıyoruz çünkü telefondan veya bilgisayardan
+            # bildirim gelince kazara "okundu" işaretlenebilir ve bot maili atlar!
             search_criteria = [
-                '(FROM "bls" UNSEEN)',
-                '(SUBJECT "OTP" UNSEEN)',
-                '(SUBJECT "verification" UNSEEN)',
-                '(SUBJECT "code" UNSEEN)',
-                '(FROM "noreply" UNSEEN)',
+                '(FROM "bls")',
+                '(FROM "blsinternational")',
+                '(SUBJECT "verification")',
+                '(SUBJECT "OTP")',
             ]
             
             for criteria in search_criteria:
@@ -135,27 +135,27 @@ class OTPReader:
                     if not msg_ids:
                         continue
                     
-                    # En son maili al (en yeni)
-                    latest_id = msg_ids[-1]
-                    status, msg_data = self._mail.fetch(latest_id, "(RFC822)")
-                    if status != "OK":
-                        continue
-                    
-                    raw_email = msg_data[0][1]
-                    msg = email.message_from_bytes(raw_email)
-                    
-                    # E-mail body'sini al
-                    body = self._get_email_body(msg)
-                    if not body:
-                        continue
-                    
-                    # OTP kodunu bul (6 haneli sayı)
-                    otp = self._extract_otp(body)
-                    if otp:
-                        # Maili okundu olarak işaretle
-                        self._mail.store(latest_id, '+FLAGS', '\\Seen')
-                        return otp
+                    # En son 3 maili kontrol et (Bazen eski OTP'ler takılı kalabilir)
+                    for latest_id in reversed(msg_ids[-3:]):
+                        status, msg_data = self._mail.fetch(latest_id, "(RFC822)")
+                        if status != "OK":
+                            continue
                         
+                        raw_email = msg_data[0][1]
+                        msg = email.message_from_bytes(raw_email)
+                        
+                        # E-mail body'sini al
+                        body = self._get_email_body(msg)
+                        if not body:
+                            continue
+                        
+                        # OTP kodunu bul (6 haneli sayı)
+                        otp = self._extract_otp(body)
+                        if otp:
+                            # Maili okundu olarak işaretle (Silmiyoruz, sadece işaretliyoruz)
+                            self._mail.store(latest_id, '+FLAGS', '\\Seen')
+                            return otp
+                            
                 except Exception as e:
                     logger.debug(f"IMAP arama hatası ({criteria}): {e}")
                     continue
@@ -210,11 +210,12 @@ class OTPReader:
         if not body:
             return None
         
-        # Strateji 1: "OTP" veya "code" kelimesinin yanındaki 6 haneli sayı
+        # BLS Mail Formatı (Görsele Göre):
+        # "Your verification code is as mentioned below \n 355916"
         patterns = [
-            r'(?:OTP|code|verification|doğrulama|kod)\s*[:=]?\s*(\d{6})',
-            r'(\d{6})\s*(?:is your|your code|verification)',
-            r'\b(\d{6})\b',  # Son çare: herhangi bir 6 haneli sayı
+            r'below\s*\n\s*(\d{6})',                             # 'below' kelimesinin altındaki 6 hane
+            r'(?:OTP|code|verification|kod)\s*[:=]?\s*(\d{6})',  # Klasik OTP yanındaki rakam
+            r'\b(\d{6})\b',                                      # GENEL: Metindeki HERHANGİ bir ayrık 6 haneli sayı (Son Çare)
         ]
         
         for pattern in patterns:

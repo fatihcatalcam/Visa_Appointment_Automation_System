@@ -925,7 +925,7 @@ class BLSScraper:
                     except: pass
                     search_norm = normalize_tr(search_value)
                     # A. Standart
-                    opts = self.driver.find_elements(By.CSS_SELECTOR, ".select2-results__option:not(.select2-results__option--disabled)")
+                    opts = self.driver.find_elements(By.CSS_CSS_SELECTOR, ".select2-results__option:not(.select2-results__option--disabled)")
                     visible = [o for o in opts if o.is_displayed()]
                     if visible:
                         opts_text = [o.text.strip() for o in visible[:5]]
@@ -2071,79 +2071,66 @@ class BLSScraper:
                     
                     # OTP Talebi ve Okunması
                     try:
-                        self._log(logging.INFO, "  OTP gönderimi tetikleniyor...")
-                        btn_otp = self._find_element_multi([
-                            (By.ID, "btnSendOTP"),
-                            (By.XPATH, "//input[@value='Request OTP']"),
-                            (By.XPATH, "//input[contains(@value, 'OTP')]")
-                        ], timeout=2)
-                        if btn_otp:
-                            try: btn_otp.click()
-                            except: self.driver.execute_script("arguments[0].click();", btn_otp)
-                            self._log(logging.INFO, "  [OTP] 'Request OTP' tuşuna basıldı.")
-                            self._log(logging.INFO, "  [OTP] Lütfen bekleyin... E-posta adresinize (IMAP) gelen şifre bekleniyor. (Maks 3 Dakika)")
+                        self._log(logging.INFO, "  [OTP] Aday seçim sayfasına ulaşıldı, sistem otomatik olarak onay kodu yolluyor...")
+                        self._log(logging.INFO, "  [OTP] Lütfen bekleyin... E-posta adresinize (IMAP) gelen şifre bekleniyor. (Maks 3 Dakika)")
+
+
+                        # EmailReader Modülü'nü Çağır (3 Dakika Süre Ver)
+                        # E-posta parametreleri GlobalUserCredentials içinden alınır
+                        from bot.email_reader import OTPReader
                             
-                            # EmailReader Modülü'nü Çağır (3 Dakika Süre Ver)
-                            # E-posta parametreleri GlobalUserCredentials içinden alınır
-                            from bot.email_reader import OTPReader
-                            
-                            # Manager.py'dan email_creds parametresi global statelerden geliyor olabilir
-                            # Şimdilik kullanıcı ayarlarına fallback yapacağız.
-                            email_address = self.user_data.get("email")
-                            app_password  = self.user_data.get("email_app_password")
-                            
-                            if not email_address or not app_password:
-                                self._log(logging.ERROR, "  [OTP] ❌ IMAP için E-posta adresi veya Uygulama Şifresi ayarlanmamış! Otomatik okuma yapılamaz.")
-                            else:
-                                from config.database import GlobalSettingsRepository
-                                from config.security import _decrypt
-                                try:
-                                    repo = GlobalSettingsRepository()
-                                    db_pw = repo.get_setting("email_app_password")
-                                    if db_pw:
-                                        app_password = _decrypt(db_pw)
-                                except: pass
+                        # Manager.py'dan email_creds parametresi global statelerden geliyor olabilir
+                        # Şimdilik kullanıcı ayarlarına fallback yapacağız.
+                        email_address = self.user_data.get("email")
+                        app_password  = self.user_data.get("email_app_password")
+                        
+                        if not email_address or not app_password:
+                            self._log(logging.ERROR, "  [OTP] ❌ IMAP için E-posta adresi veya Uygulama Şifresi ayarlanmamış! Otomatik okuma yapılamaz.")
+                        else:
+                            # Ekrana basılan hatayı kolayca izlemek için bir hook verelim
+                            def otp_log_hook(lvl, msg):
+                                self._log(lvl, f"  [OTP] {msg}")
+
+                            reader = OTPReader(email_address, app_password, log_func=otp_log_hook)
+                            otp_code = reader.wait_for_otp(timeout=180, poll_interval=10)
                                 
-                                reader = OTPReader(email_address, app_password)
-                                otp_code = reader.wait_for_bls_otp(timeout=180, check_interval=10)
-                                    
-                                if otp_code:
-                                    self._log(logging.INFO, f"  [OTP] ✅ Gelen Kutusu (IMAP) Üzerinden Şifre Başarıyla Okundu: {otp_code}")
-                                    self._log(logging.INFO, "  [OTP] Şifre ekrana giriliyor...")
-                                    
-                                    # Kendo NumericTextBox veya maskeli inputlara karşı direkt JS injection en güvenlisidir
-                                    js_inject_otp = f"""
-                                        try {{
-                                            // BLS genelde 'OTP' veya 'OTPCode' ID'si kullanır
-                                            var otpInput = document.getElementById('OTP') || document.getElementById('OTPCode') || document.querySelector('input[name*="OTP"]');
-                                            if(otpInput) {{
-                                                otpInput.value = '{otp_code}';
-                                                otpInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                                                otpInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                                                return true;
-                                            }}
-                                        }} catch(e) {{}}
-                                        return false;
-                                    """
-                                    self.driver.execute_script(js_inject_otp)
-                                    time.sleep(1.5)
-                                    
-                                    # Verify Butonu Yoksa da sorun değil, bazen otomatik geçiyor. 
-                                    # Yeni sistemde genelde "Verify OTP" veya "btnVerifyOTP" id'si olur.
-                                    btn_verify = self._find_element_multi([
-                                        (By.ID, "btnVerifyOTP"),
-                                        (By.ID, "btnVerify"),
-                                        (By.XPATH, "//input[@value='Verify OTP']"),
-                                        (By.XPATH, "//button[contains(text(), 'Verify')]")
-                                    ], timeout=2)
-                                    
-                                    if btn_verify:
-                                        self._log(logging.INFO, "  [OTP] 'Verify / Doğrula' butonuna basılıyor.")
-                                        try: btn_verify.click()
-                                        except: self.driver.execute_script("arguments[0].click();", btn_verify)
-                                        time.sleep(3)
-                                else:
-                                    self._log(logging.ERROR, "  [OTP] ❌ Verilen 3 dakika içinde IMAP'e herhangi bir OTP maili düşmedi.")
+                            if otp_code:
+                                self._log(logging.INFO, f"  [OTP] ✅ Gelen Kutusu (IMAP) Üzerinden Şifre Başarıyla Okundu: {otp_code}")
+                                self._log(logging.INFO, "  [OTP] Şifre ekrana giriliyor...")
+                                
+                                # Kendo NumericTextBox veya maskeli inputlara karşı direkt JS injection en güvenlisidir
+                                js_inject_otp = f"""
+                                    try {{
+                                        // BLS genelde 'OTP' veya 'OTPCode' ID'si kullanır
+                                        var otpInput = document.getElementById('OTP') || document.getElementById('OTPCode') || document.querySelector('input[name*="OTP"]');
+                                        if(otpInput) {{
+                                            otpInput.value = '{otp_code}';
+                                            otpInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                                            otpInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                                            return true;
+                                        }}
+                                    }} catch(e) {{}}
+                                    return false;
+                                """
+                                self.driver.execute_script(js_inject_otp)
+                                time.sleep(1.5)
+                                
+                                # Verify Butonu Yoksa da sorun değil, bazen otomatik geçiyor. 
+                                # Yeni sistemde genelde "Verify OTP" veya "btnVerifyOTP" id'si olur.
+                                btn_verify = self._find_element_multi([
+                                    (By.ID, "btnVerifyOTP"),
+                                    (By.ID, "btnVerify"),
+                                    (By.XPATH, "//input[@value='Verify OTP']"),
+                                    (By.XPATH, "//button[contains(text(), 'Verify')]")
+                                ], timeout=2)
+                                
+                                if btn_verify:
+                                    self._log(logging.INFO, "  [OTP] 'Verify / Doğrula' butonuna basılıyor.")
+                                    try: btn_verify.click()
+                                    except: self.driver.execute_script("arguments[0].click();", btn_verify)
+                                    time.sleep(3)
+                            else:
+                                self._log(logging.ERROR, "  [OTP] ❌ Verilen 3 dakika içinde IMAP'e herhangi bir OTP maili düşmedi.")
                     except Exception as otp_e:
                         self._log(logging.WARNING, f"  [OTP] Hatası: {otp_e}")
 

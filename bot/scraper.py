@@ -1482,26 +1482,22 @@ class BLSScraper:
                 # Başarılı geçildiyse sayfa değişmiştir, current_url'yi güncelle
                 current_url = self.driver.current_url
 
-            # --- 2) Zaten Applicant Selection Sayfasındaysa ---
-            if "ApplicantSelection" in current_url:
-                self._log(logging.INFO, "  Doğrudan Applicant Selection sayfasındayız. Takvim adımı atlanıyor.")
-                date_clicked = True
-                slot_selected = True
-                
-            else:
-                # --- 3) Normal Takvim/Slot Seçimi ---
-                self._log(logging.INFO, "  Takvim/Slot seçimi adımındayız...")
+            # YENİ FIX: "ApplicantSelection in current_url" ise takvimi atla MANTIĞI SİLİNDİ.
+            # BLS Türkiye'de Takvim VE Başvuru Formu AYNI sayfada olduğundan, takvim HER ZAMAN işlenmelidir,
+            # sayfa URL'si ne olursa olsun. (Özellikle Pending silindikten sonra direkt form geldiğinde atlanmaması için)
             
-                target_month = ""
-                if "/" in str(target_date):
-                    parts = str(target_date).split('/')
-                    if len(parts) >= 2:
-                        mt = int(parts[1])
-                        month_names = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-                        if 1 <= mt <= 12:
-                            target_month = month_names[mt]
-                if "(" in str(target_date):
-                    target_month = str(target_date).split("(")[1].replace(")", "").strip()
+            # --- 3) Normal Takvim/Slot Seçimi ---
+            self._log(logging.INFO, "  Takvim/Slot seçimi adımındayız...")
+            target_month = ""
+            if "/" in str(target_date):
+                parts = str(target_date).split('/')
+                if len(parts) >= 2:
+                    mt = int(parts[1])
+                    month_names = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+                    if 1 <= mt <= 12:
+                        target_month = month_names[mt]
+            if "(" in str(target_date):
+                target_month = str(target_date).split("(")[1].replace(")", "").strip()
                 
                 self._log(logging.INFO, f"  Kendo takvimde gun seciliyor: day_num='{day_num}' | target_date='{target_date}' | target_month='{target_month or 'BOŞ - navigasyon YOK'}'")
                 
@@ -2079,24 +2075,88 @@ class BLSScraper:
                     
                     if file_input:
                         stock_photo_path = os.path.join(os.getcwd(), "test_photo.jpg")
-                        if not os.path.exists(stock_photo_path):
-                            # Dosya yoksa dummy bir dosya yarat (Sistemi kandırmak için)
-                            with open(stock_photo_path, "wb") as f:
-                                # Geçerli bir JPEG header'ı ile 1 piksel oluştur
-                                f.write(b'\xFF\xD8\xFF\xE0\x00\x10JFIF\x00\x01\x01\x01\x00H\x00H\x00\x00\xFF\xDB\x00C\x00\x05\x03\x04\x04\x04\x03\x05\x04\x04\x04\x05\x05\x05\x06\x07\x0C\x08\x07\x07\x07\x0F\x0B\x0B\t\x0C\x11\x0F\x12\x12\x11\x0F\x11\x11\x13\x16\x1C\x17\x13\x14\x1A\x15\x11\x11\x18!\x18\x1A\x1D\x1D\x1F\x1F\x1F\x13\x17"$x\x1E$\x1C\x1E\x1F\x1E\xFF\xDB\x00C\x01\x05\x05\x05\x07\x06\x07\x0E\x08\x08\x0E\x1E\x14\x11\x14\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\xFF\xC0\x00\x0B\x08\x00\x01\x00\x01\x03\x01"\x00\x02\x11\x01\x03\x11\x01\xFF\xC4\x00\x1F\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0B\xFF\xC4\x00\xB5\x10\x00\x02\x01\x03\x03\x02\x04\x03\x05\x05\x04\x04\x00\x00\x01}\x01\x02\x03\x00\x04\x11\x05\x12!1A\x06\x13Qa\x07"q\x142\x81\x91\xA1\x08#B\xB1\xC1\x15R\xD1\xF0$3br\x82\t\n\x16\x17\x18\x19\x1A%&\'()*456789:CDEFGHIJSTUVWXYZcdefghijstuvwxyz\x83\x84\x85\x86\x87\x88\x89\x8A\x92\x93\x94\x95\x96\x97\x98\x99\x9A\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xF1\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFF\xC4\x00\x1F\x01\x00\x03\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0B\xFF\xC4\x00\xB5\x11\x00\x02\x01\x02\x04\x04\x03\x04\x07\x05\x04\x04\x00\x01\x02w\x00\x01\x02\x03\x11\x04\x05!1\x06\x12AQ\x07aq\x13"2\x81\x08\x14B\x91\xA1\xB1\xC1\t#3R\xF0\x15br\xD1\n\x16$4\xE1%\xF1\x17\x18\x19\x1A&\'()*56789:CDEFGHIJSTUVWXYZcdefghijstuvwxyz\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x92\x93\x94\x95\x96\x97\x98\x99\x9A\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFF\xDA\x00\x0C\x03\x01\x00\x02\x11\x03\x11\x00?\x00\xF5Z\xA8\xBF\xFF\xD9')
-
-                        file_input.send_keys(stock_photo_path)
-                        self._log(logging.INFO, "  Fotoğraf seçildi: " + stock_photo_path)
                         
-                        # Upload Trigger button
+                        # Kullanıcının 200KB altı, tam siyah düzgün bir fotoğraf talebi (Pillow ile)
+                        try:
+                            from PIL import Image
+                            # 400x400 Siyah bir arkaplan oluştur (JPEG olarak genelde 10-20 KB arası tutar)
+                            img = Image.new('RGB', (400, 400), color='black')
+                            img.save(stock_photo_path, format='JPEG', quality=85)
+                        except Exception as e:
+                            self._log(logging.WARNING, f"  [APPLICANT] Siyah fotoğraf üretilirken hata: {e}")
+
+                        # Dosyayı input'a gönder (Standart Selenium + JS DataTransfer Garanti)
+                        try:
+                            file_input.send_keys(stock_photo_path)
+                        except Exception as e:
+                            self._log(logging.WARNING, f"  [APPLICANT] Standart photo injection başarısız, JavaScript ile denenecek: {e}")
+                            
+                        # SUBAGENT FIX: Kendo UI file input'u change eventi istiyor
+                        js_upload_trigger = """
+                            var fileInput = document.getElementById('uploadfile-1') || document.querySelector("input[type='file']");
+                            if(fileInput) {
+                                // Event fırlatarak frontend validation'ı tetikle
+                                fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+                            }
+                        """
+                        self.driver.execute_script(js_upload_trigger)
+                        
+                        self._log(logging.INFO, f"  Fotoğraf başarıyla sisteme verildi: {stock_photo_path}")
+                        time.sleep(1)
+                        
+                        # Upload Trigger button (Kendo UI Upload modülleri için genişletildi)
                         btn_upload = self._find_element_multi([
                             (By.ID, "btnUpload"),
-                            (By.XPATH, "//input[@value='Upload']")
+                            (By.ID, "btnUploadPhoto"),
+                            (By.XPATH, "//label[contains(@class, 'upload-photo-btn')]"), # Subagent uyarısı
+                            (By.XPATH, "//input[@value='Upload']"),
+                            (By.XPATH, "//button[contains(text(), 'Upload') or contains(text(), 'Yükle')]"),
+                            (By.XPATH, "//button[contains(@class, 'k-upload-selected') or contains(@class, 'k-button')]//span[contains(text(), 'Upload') or contains(text(), 'Yükle')]")
                         ], timeout=2)
+                        
                         if btn_upload:
+                            self._log(logging.INFO, "  [APPLICANT] Fotoğraf 'Upload/Yükle' butonuna basılıyor.")
+                            # Kendo UI upload butonlarına tıklarken hem JS hem DOM click deneyelim
                             try: btn_upload.click()
-                            except: self.driver.execute_script("arguments[0].click();", btn_upload)
-                            time.sleep(2)
+                            except: pass
+                            self.driver.execute_script("try{arguments[0].click();}catch(e){}", btn_upload)
+                            time.sleep(1.5)
+                            
+                            # YENİ EKLENEN: Başarılı yükleme sonrası çıkan "Confirm Photo" dialogundaki "Understood" butonunu geçme
+                            self._log(logging.INFO, "  [APPLICANT] 'Confirm Photo' onay pop-up'ı bekleniyor...")
+                            
+                            # Subagent tespiti: global-overlay-loader isimli bir loading ekranı tıklamaları engelleyebiliyor.
+                            time.sleep(1.5)
+                            
+                            btn_understood = self._find_element_multi([
+                                (By.XPATH, "//div[@id='photoUploadModal']//button[@onclick='return OnPhotoAccepted();']"),
+                                (By.XPATH, "//div[@id='photoUploadModal']//button[contains(text(), 'Understood') or contains(text(), 'Anladım')]")
+                            ], timeout=3)
+                            
+                            if btn_understood:
+                                self._log(logging.INFO, "  [APPLICANT] 'Understood' butonuna tıklanıyor.")
+                                try: btn_understood.click()
+                                except: self.driver.execute_script("arguments[0].click();", btn_understood)
+                                time.sleep(1)
+                            else:
+                                # JS garantisi - Subagent'ın önerdiği kesin selector
+                                self.driver.execute_script("""
+                                    var btn = document.querySelector("#photoUploadModal button[onclick*='OnPhotoAccepted']");
+                                    if(btn) { btn.click(); }
+                                    else {
+                                        var btns = document.querySelectorAll('#photoUploadModal button');
+                                        for(var i=0; i<btns.length; i++) {
+                                            if(btns[i].innerText.toLowerCase().includes('understood') || btns[i].innerText.toLowerCase().includes('anladım')) {
+                                                btns[i].click();
+                                                break;
+                                            }
+                                        }
+                                    }
+                                """)
+                                time.sleep(1)
+                                
+                        # Bazı durumlarda ekstra doğrulama veya popup çıkabiliyor, bu basit bekleme onu sindirmek içindir.
+                        time.sleep(1)
                     
                     # OTP Talebi ve Okunması
                     try:

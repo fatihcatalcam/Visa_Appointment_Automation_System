@@ -11182,3 +11182,131 @@ Symbols not available. Dumping unresolved backtrace:
 [2026-03-05 20:57:27] WARNING - Randevu alımı onay sayfasına ulaşamadı. Kalan URL: https://turkey.blsspainglobal.com/global/appointment/applicantselection
 [2026-03-05 20:57:27] WARNING - ❌ Otomatik randevu alınamadı (slot kapanmış olabilir).
 [2026-03-05 20:57:27] INFO - Randevu bulunduğu için bot beklemeye alındı (1 Saat).
+[2026-03-05 21:58:34] INFO - Bot başlatılıyor... [Scout Modu: Kapalı]
+[2026-03-05 21:58:35] INFO - Normal (Görünür) Chrome başlatılıyor... [UA: Chrome 122.0.2863.15]
+[2026-03-05 21:58:41] INFO - Stealth JS Enjekte Edildi.
+[2026-03-05 21:58:42] INFO - Chrome WebDriver başlatıldı (Network Loglama Aktif)
+[2026-03-05 21:58:45] INFO - 🔍 3 cookie yüklendi, oturum kontrol ediliyor...
+[2026-03-05 21:58:49] INFO - ❌ Cookie oturumu süresi dolmuş. Normal login yapılacak.
+[2026-03-05 21:58:49] INFO - Giriş yapılıyor...
+[2026-03-05 21:58:53] INFO - Görünür input sayısı: 1
+[2026-03-05 21:58:53] INFO - Email girildi: fthctlcm@outlook.com
+[2026-03-05 21:58:54] INFO - Verify tıklanıyor...
+[2026-03-05 21:59:00] INFO - Captcha ve Ã…ifre alanı aynı anda tespit edildi. Önce şifre girilecek...
+[2026-03-05 21:59:01] INFO - Ã…ifre sayfası bekleniyor... (10.0 sn)
+[2026-03-05 21:59:06] INFO - Giriş/Ã…ifre Denemesi: 1/3
+[2026-03-05 21:59:11] INFO - Ã…ifre girildi
+[2026-03-05 21:59:13] INFO - CAPTCHA çözülüyor (Ã…ifre girildi, şimdi Submit edilecek)...
+[2026-03-05 22:01:54] INFO - Captcha Submit edildi. Sonuç bekleniyor...
+[2026-03-05 22:02:00] INFO - ✅ Giriş başarılı! URL: https://turkey.blsspainglobal.com/global/home/index
+[2026-03-05 22:02:00] INFO - Randevu sayfasına gidiliyor...
+[2026-03-05 22:02:04] INFO - CAPTCHA algilandi, cozum baslatiliyor...
+[2026-03-05 22:03:24] INFO - Randevu sayfası URL: https://turkey.blsspainglobal.com/Global/Appointment/VisaType?data=sNnU5sgSo04aUoYscdAA2pUPXQWUdvzs9FMFJTQhQaulaan%2FugI76C1773tqgG5lra7hD5Q%2BOGa9xxBDxMMJWMoyiyKh9%2FSVeW3cyIOuOIG4mMjKYC%2F0ERf%2FIBIZN0OdyxHO8X%2Fr5DArHuj3UuxtjoX54wtxiJ9oZe%2F0bp%2F4Z2bFnkWIwiQeup3QMuv17MIgatvGLGpjMvIGfSPmu6ENKP%2FSLNuVwaoEAPv90pf7OGtSydihE%2BZc5EyUj8ebb4%2B2JJ8HvmTJuraI4l6vramOAiY5xY5DTucH9rh%2FWZ6kUNSLm%2BKFelk7zf6kuqURxJB2
+[2026-03-05 22:03:24] DEBUG - Sayfa içeriği (ilk 500): Apply for VISA to Spain In Turkey
+Follow us on
+𝕏
+English
+Book New Appointment
+Application Status
+Manage Appointments
+Insuarance
+Book New Appointment - Visa Type Selection
+Applicants are responsible for taking appointments as per their Jurisdiction.
+Your visa application will not be accepted if your place of residence is out of the consular jurisdiction of the Consulate where you intend to apply
+Jurisdiction*
+--Select--
+Location*
+--Select--
+Visa Type*
+--Select--
+Visa Sub Type*
+--Select--
+Appointm
+[2026-03-05 22:03:24] INFO - --- Kategori Kontrol Ediliyor: Premium ---
+[2026-03-05 22:04:13] INFO -   ÄŸÅ¸â€â€ Pending silindiği için form Premium için tekrar dolduruluyor...
+[2026-03-05 22:06:40] INFO -   Form sonrası CAPTCHA kontrolü yapılıyor...
+[2026-03-05 22:06:40] INFO - CAPTCHA algilandi, cozum baslatiliyor...
+[2026-03-05 22:07:52] INFO -   ✅ Ekranda CAPTCHA kalmadı, takvim aranıyor...
+[2026-03-05 22:07:52] INFO - Takvimde yeşil (müsait) günler aranıyor...
+[2026-03-05 22:07:54] INFO -   [NATIVE JS] Görünür takvim ikonu aranıyor ve tıklanıyor...
+[2026-03-05 22:07:57] WARNING - Takvim animasyonu uzun sürdü veya takvim UI'ı saptanamadı.
+[2026-03-05 22:07:57] INFO -   Taranan Ay: March 2026
+[2026-03-05 22:07:57] INFO -   Sonraki aya geçiliyor...
+[2026-03-05 22:07:58] INFO -   Taranan Ay: April 2026
+[2026-03-05 22:07:58] INFO -   Sonraki aya geçiliyor...
+[2026-03-05 22:07:59] INFO -   Taranan Ay: May 2026
+[2026-03-05 22:07:59] INFO -   Sonraki aya geçiliyor...
+[2026-03-05 22:08:01] INFO -   Taranan Ay: June 2026
+[2026-03-05 22:08:01] INFO -   Sonraki aya geçiliyor...
+[2026-03-05 22:08:02] INFO -   Taranan Ay: July 2026
+[2026-03-05 22:08:02] INFO - Bulunan müsait günler: ['22 (July 2026)', '23 (July 2026)', '24 (July 2026)', '27 (July 2026)', '28 (July 2026)', '29 (July 2026)', '30 (July 2026)', '31 (July 2026)']
+[2026-03-05 22:08:02] INFO - RANDEVU BULUNDU (Premium): ['30 (July 2026)', '22 (July 2026)', '23 (July 2026)', '27 (July 2026)', '24 (July 2026)', '29 (July 2026)', '28 (July 2026)', '31 (July 2026)']
+[2026-03-05 22:08:02] INFO - 🎉 RANDEVU BULUNDU: 30 (July 2026) (Premium), 22 (July 2026) (Premium), 23 (July 2026) (Premium), 27 (July 2026) (Premium), 24 (July 2026) (Premium), 29 (July 2026) (Premium), 28 (July 2026) (Premium), 31 (July 2026) (Premium)
+[2026-03-05 22:08:02] INFO - 📨 Discord bildirimi gönderildi
+[2026-03-05 22:08:02] INFO - 📌 Otomatik randevu alma başlatılıyor...
+[2026-03-05 22:08:02] INFO - 🚀 Kategori [Premium] - Tarih [30 (July 2026)] için form dolduruluyor...
+[2026-03-05 22:08:02] INFO -   Zaten slot seçim sayfasındayız, URL reload atlanıyor.
+[2026-03-05 22:08:02] INFO -   Takvim/Slot seçimi adımındayız...
+[2026-03-05 22:08:02] INFO -   Kendo takvimde gun seciliyor: day_num='30' | target_date='30 (July 2026)' | target_month='July 2026'
+[2026-03-05 22:08:02] INFO -   [CAL] Adim 1/3: Takvim ikonu tiklaniyor...
+[2026-03-05 22:08:03] INFO -   [CAL] Adim 2/3: 'July 2026' ayina gidiliyor...
+[2026-03-05 22:08:03] DEBUG -     [NAV] Mevcut ay: 'July 2026' | Hedef: 'July 2026'
+[2026-03-05 22:08:03] INFO -   [CAL] Dogru ayda: 'July 2026'
+[2026-03-05 22:08:03] INFO -   [CAL] Adim 3/3: Takvimde gun '30' aranip jQuery trigger ile tiklaniyor...
+[2026-03-05 22:08:04] INFO -   [CAL] click_result: OK:30:rgb(12, 188, 135)
+[2026-03-05 22:08:04] INFO -   [CAL] Tarihe basarıyla tiklandi: OK:30:rgb(12, 188, 135)
+[2026-03-05 22:08:04] INFO -   [CAL] AJAX spinner'i bekleniyor...
+[2026-03-05 22:08:05] INFO -   [SLOT] Tarih seçimi sonrası saat slotlarının yüklenmesi bekleniyor...
+[2026-03-05 22:08:06] INFO -   [SLOT] Saat dropdown'u hazır!
+[2026-03-05 22:08:09] INFO -   [SLOT] Saat dropdown'u açılıyor...
+[2026-03-05 22:08:09] INFO -   [SLOT] Dropdown acildi: opened:dropdown-wrap
+[2026-03-05 22:08:09] INFO -   [SLOT] Dropdown animasyonunun ve AJAX'in tamamlanmasi bekleniyor...
+[2026-03-05 22:08:09] INFO -   [SLOT] Saat basariyla secildi: SELECTED:10:00-10:30
+[2026-03-05 22:08:12] INFO -   >> Submit (Onayla) tuşuna Python üzerinden basılıyor.
+[2026-03-05 22:08:14] INFO -   >> Submit tuşuna başarıyla NATIVE JS ile tıklandı.
+[2026-03-05 22:08:18] INFO -   >> Applicant Selection sayfası algılandı.
+[2026-03-05 22:08:18] INFO -   [APPLICANT] Terms of Service / Consent Modalı kontrol ediliyor...
+[2026-03-05 22:08:20] INFO -   [APPLICANT] Seyahat tarih alanları dolduruluyor...
+[2026-03-05 22:08:21] INFO -   [APPLICANT] Aday listeden seciliyor...
+[2026-03-05 22:08:22] INFO -   Stock vesikalık fotoğraf yükleniyor...
+[2026-03-05 22:08:25] INFO -   [OTP] Aday seçim sayfasına ulaşıldı, sistem otomatik olarak onay kodu yolluyor...
+[2026-03-05 22:08:25] INFO -   [OTP] Lütfen bekleyin... E-posta adresinize (IMAP) gelen şifre bekleniyor. (Maks 3 Dakika)
+[2026-03-05 22:08:25] INFO -   [OTP] Uygulama Şifresi kutusunda Yönlendirme Maili (Alias) algılandı: fthctlcm2004@gmail.com
+[2026-03-05 22:08:25] INFO -   [OTP] IMAP Şifresi Kontrolü: Uzunluk=16, Baş/Son=ck***oj
+[2026-03-05 22:08:26] INFO -   [OTP] IMAP bağlantısı başarılı: fthctlcm2004@gmail.com → imap.gmail.com
+[2026-03-05 22:08:26] INFO -   [OTP] OTP bekleniyor... (180sn limit)
+[2026-03-05 22:08:27] INFO -   [OTP] ✅ HEDEF YAKALANDI: OTP bulundu -> 368618
+[2026-03-05 22:08:27] INFO -   [OTP] ✅ Gelen Kutusu (IMAP) Üzerinden Şifre Başarıyla Okundu: 368618
+[2026-03-05 22:08:27] INFO -   [OTP] Şifre ekrana giriliyor...
+[2026-03-05 22:08:29] DEBUG -   [OTP] Selenium fallback hatası: Message: element click intercepted: Element is not clickable at point (762, -256)
+  (Session info: chrome=145.0.7632.117)
+Stacktrace:
+Symbols not available. Dumping unresolved backtrace:
+	0x7ff74a2faa55
+	0x7ff74a058630
+	0x7ff749ded75d
+	0x7ff749e50b65
+	0x7ff749e4e27a
+	0x7ff749e4b115
+	0x7ff749e49fc7
+	0x7ff749e3b426
+	0x7ff749e719da
+	0x7ff749e3aca6
+	0x7ff749e9591c
+	0x7ff749e39098
+	0x7ff749e39f83
+	0x7ff74a327810
+	0x7ff74a321afd
+	0x7ff74a342c1a
+	0x7ff74a073345
+	0x7ff74a07b81c
+	0x7ff74a061924
+	0x7ff74a061ad6
+	0x7ff74a047e47
+	0x7ffdf8a9e8d7
+	0x7ffdf9f4c40c
+
+[2026-03-05 22:08:31] INFO -   >> Submit/Proceed (Applicant Selection) butonuna basılıyor.
+[2026-03-05 22:08:37] WARNING - Randevu alımı onay sayfasına ulaşamadı. Kalan URL: https://turkey.blsspainglobal.com/global/appointment/applicantselection
+[2026-03-05 22:08:37] WARNING - ❌ Otomatik randevu alınamadı (slot kapanmış olabilir).
+[2026-03-05 22:08:37] INFO - Randevu bulunduğu için bot beklemeye alındı (1 Saat).

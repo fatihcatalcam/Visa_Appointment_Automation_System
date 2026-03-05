@@ -8426,3 +8426,85 @@
 {"timestamp": 1772733447.3372223, "level": "WARNING", "user_id": 2, "message": "Randevu al\u0131m\u0131 onay sayfas\u0131na ula\u015famad\u0131. Kalan URL: https://turkey.blsspainglobal.com/global/appointment/applicantselection", "proxy": ""}
 {"timestamp": 1772733447.5722532, "level": "WARNING", "user_id": 2, "message": "\u274c Otomatik randevu al\u0131namad\u0131 (slot kapanm\u0131\u015f olabilir).", "proxy": ""}
 {"timestamp": 1772733447.8014052, "level": "INFO", "user_id": 2, "message": "Randevu bulundu\u011fu i\u00e7in bot beklemeye al\u0131nd\u0131 (1 Saat).", "proxy": ""}
+{"timestamp": 1772737114.537972, "level": "INFO", "user_id": 2, "message": "Bot ba\u015flat\u0131l\u0131yor... [Scout Modu: Kapal\u0131]", "proxy": ""}
+{"timestamp": 1772737115.2391975, "level": "INFO", "user_id": 2, "message": "Normal (G\u00f6r\u00fcn\u00fcr) Chrome ba\u015flat\u0131l\u0131yor... [UA: Chrome 122.0.2863.15]", "proxy": ""}
+{"timestamp": 1772737121.9985628, "level": "INFO", "user_id": 2, "message": "Stealth JS Enjekte Edildi.", "proxy": ""}
+{"timestamp": 1772737122.0020895, "level": "INFO", "user_id": 2, "message": "Chrome WebDriver ba\u015flat\u0131ld\u0131 (Network Loglama Aktif)", "proxy": ""}
+{"timestamp": 1772737125.7233157, "level": "INFO", "user_id": 2, "message": "\ud83d\udd0d 3 cookie y\u00fcklendi, oturum kontrol ediliyor...", "proxy": ""}
+{"timestamp": 1772737129.364241, "level": "INFO", "user_id": 2, "message": "\u274c Cookie oturumu s\u00fcresi dolmu\u015f. Normal login yap\u0131lacak.", "proxy": ""}
+{"timestamp": 1772737129.374034, "level": "INFO", "user_id": 2, "message": "Giri\u015f yap\u0131l\u0131yor...", "proxy": ""}
+{"timestamp": 1772737133.0046408, "level": "INFO", "user_id": 2, "message": "G\u00f6r\u00fcn\u00fcr input say\u0131s\u0131: 1", "proxy": ""}
+{"timestamp": 1772737133.5236504, "level": "INFO", "user_id": 2, "message": "Email girildi: fthctlcm@outlook.com", "proxy": ""}
+{"timestamp": 1772737134.6082942, "level": "INFO", "user_id": 2, "message": "Verify t\u0131klan\u0131yor...", "proxy": ""}
+{"timestamp": 1772737140.9502337, "level": "INFO", "user_id": 2, "message": "Captcha ve \u00c3\u2026ifre alan\u0131 ayn\u0131 anda tespit edildi. \u00d6nce \u015fifre girilecek...", "proxy": ""}
+{"timestamp": 1772737141.7824337, "level": "INFO", "user_id": 2, "message": "\u00c3\u2026ifre sayfas\u0131 bekleniyor... (10.0 sn)", "proxy": ""}
+{"timestamp": 1772737146.3184338, "level": "INFO", "user_id": 2, "message": "Giri\u015f/\u00c3\u2026ifre Denemesi: 1/3", "proxy": ""}
+{"timestamp": 1772737151.8076324, "level": "INFO", "user_id": 2, "message": "\u00c3\u2026ifre girildi", "proxy": ""}
+{"timestamp": 1772737153.5013275, "level": "INFO", "user_id": 2, "message": "CAPTCHA \u00e7\u00f6z\u00fcl\u00fcyor (\u00c3\u2026ifre girildi, \u015fimdi Submit edilecek)...", "proxy": ""}
+{"timestamp": 1772737314.7104027, "level": "INFO", "user_id": 2, "message": "Captcha Submit edildi. Sonu\u00e7 bekleniyor...", "proxy": ""}
+{"timestamp": 1772737320.0074046, "level": "INFO", "user_id": 2, "message": "\u2705 Giri\u015f ba\u015far\u0131l\u0131! URL: https://turkey.blsspainglobal.com/global/home/index", "proxy": ""}
+{"timestamp": 1772737320.302127, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131na gidiliyor...", "proxy": ""}
+{"timestamp": 1772737324.730672, "level": "INFO", "user_id": 2, "message": "CAPTCHA algilandi, cozum baslatiliyor...", "proxy": ""}
+{"timestamp": 1772737404.5428536, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131 URL: https://turkey.blsspainglobal.com/Global/Appointment/VisaType?data=sNnU5sgSo04aUoYscdAA2pUPXQWUdvzs9FMFJTQhQaulaan%2FugI76C1773tqgG5lra7hD5Q%2BOGa9xxBDxMMJWMoyiyKh9%2FSVeW3cyIOuOIG4mMjKYC%2F0ERf%2FIBIZN0OdyxHO8X%2Fr5DArHuj3UuxtjoX54wtxiJ9oZe%2F0bp%2F4Z2bFnkWIwiQeup3QMuv17MIgatvGLGpjMvIGfSPmu6ENKP%2FSLNuVwaoEAPv90pf7OGtSydihE%2BZc5EyUj8ebb4%2B2JJ8HvmTJuraI4l6vramOAiY5xY5DTucH9rh%2FWZ6kUNSLm%2BKFelk7zf6kuqURxJB2", "proxy": ""}
+{"timestamp": 1772737404.5443597, "level": "DEBUG", "user_id": 2, "message": "Sayfa i\u00e7eri\u011fi (ilk 500): Apply for VISA to Spain In Turkey\nFollow us on\n\ud835\udd4f\nEnglish\nBook New Appointment\nApplication Status\nManage Appointments\nInsuarance\nBook New Appointment - Visa Type Selection\nApplicants are responsible for taking appointments as per their Jurisdiction.\nYour visa application will not be accepted if your place of residence is out of the consular jurisdiction of the Consulate where you intend to apply\nJurisdiction*\n--Select--\nLocation*\n--Select--\nVisa Type*\n--Select--\nVisa Sub Type*\n--Select--\nAppointm", "proxy": ""}
+{"timestamp": 1772737404.546878, "level": "INFO", "user_id": 2, "message": "--- Kategori Kontrol Ediliyor: Premium ---", "proxy": ""}
+{"timestamp": 1772737453.386322, "level": "INFO", "user_id": 2, "message": "  \u00c4\u0178\u00c5\u00b8\u00e2\u20ac\u009d\u00e2\u20ac\u009e Pending silindi\u011fi i\u00e7in form Premium i\u00e7in tekrar dolduruluyor...", "proxy": ""}
+{"timestamp": 1772737600.0776722, "level": "INFO", "user_id": 2, "message": "  Form sonras\u0131 CAPTCHA kontrol\u00fc yap\u0131l\u0131yor...", "proxy": ""}
+{"timestamp": 1772737600.1256354, "level": "INFO", "user_id": 2, "message": "CAPTCHA algilandi, cozum baslatiliyor...", "proxy": ""}
+{"timestamp": 1772737672.5568628, "level": "INFO", "user_id": 2, "message": "  \u2705 Ekranda CAPTCHA kalmad\u0131, takvim aran\u0131yor...", "proxy": ""}
+{"timestamp": 1772737672.8534744, "level": "INFO", "user_id": 2, "message": "Takvimde ye\u015fil (m\u00fcsait) g\u00fcnler aran\u0131yor...", "proxy": ""}
+{"timestamp": 1772737674.187188, "level": "INFO", "user_id": 2, "message": "  [NATIVE JS] G\u00f6r\u00fcn\u00fcr takvim ikonu aran\u0131yor ve t\u0131klan\u0131yor...", "proxy": ""}
+{"timestamp": 1772737677.3423538, "level": "WARNING", "user_id": 2, "message": "Takvim animasyonu uzun s\u00fcrd\u00fc veya takvim UI'\u0131 saptanamad\u0131.", "proxy": ""}
+{"timestamp": 1772737677.867543, "level": "INFO", "user_id": 2, "message": "  Taranan Ay: March 2026", "proxy": ""}
+{"timestamp": 1772737677.8857439, "level": "INFO", "user_id": 2, "message": "  Sonraki aya ge\u00e7iliyor...", "proxy": ""}
+{"timestamp": 1772737678.9232008, "level": "INFO", "user_id": 2, "message": "  Taranan Ay: April 2026", "proxy": ""}
+{"timestamp": 1772737678.9409313, "level": "INFO", "user_id": 2, "message": "  Sonraki aya ge\u00e7iliyor...", "proxy": ""}
+{"timestamp": 1772737679.9634242, "level": "INFO", "user_id": 2, "message": "  Taranan Ay: May 2026", "proxy": ""}
+{"timestamp": 1772737679.9822576, "level": "INFO", "user_id": 2, "message": "  Sonraki aya ge\u00e7iliyor...", "proxy": ""}
+{"timestamp": 1772737681.004718, "level": "INFO", "user_id": 2, "message": "  Taranan Ay: June 2026", "proxy": ""}
+{"timestamp": 1772737681.0302806, "level": "INFO", "user_id": 2, "message": "  Sonraki aya ge\u00e7iliyor...", "proxy": ""}
+{"timestamp": 1772737682.0533996, "level": "INFO", "user_id": 2, "message": "  Taranan Ay: July 2026", "proxy": ""}
+{"timestamp": 1772737682.0584295, "level": "INFO", "user_id": 2, "message": "Bulunan m\u00fcsait g\u00fcnler: ['22 (July 2026)', '23 (July 2026)', '24 (July 2026)', '27 (July 2026)', '28 (July 2026)', '29 (July 2026)', '30 (July 2026)', '31 (July 2026)']", "proxy": ""}
+{"timestamp": 1772737682.0600035, "level": "INFO", "user_id": 2, "message": "RANDEVU BULUNDU (Premium): ['30 (July 2026)', '22 (July 2026)', '23 (July 2026)', '27 (July 2026)', '24 (July 2026)', '29 (July 2026)', '28 (July 2026)', '31 (July 2026)']", "proxy": ""}
+{"timestamp": 1772737682.0627055, "level": "INFO", "user_id": 2, "message": "\ud83c\udf89 RANDEVU BULUNDU: 30 (July 2026) (Premium), 22 (July 2026) (Premium), 23 (July 2026) (Premium), 27 (July 2026) (Premium), 24 (July 2026) (Premium), 29 (July 2026) (Premium), 28 (July 2026) (Premium), 31 (July 2026) (Premium)", "proxy": ""}
+{"timestamp": 1772737682.9330375, "level": "INFO", "user_id": 2, "message": "\ud83d\udce8 Discord bildirimi g\u00f6nderildi", "proxy": ""}
+{"timestamp": 1772737682.9355657, "level": "INFO", "user_id": 2, "message": "\ud83d\udccc Otomatik randevu alma ba\u015flat\u0131l\u0131yor...", "proxy": ""}
+{"timestamp": 1772737682.9365647, "level": "INFO", "user_id": 2, "message": "\ud83d\ude80 Kategori [Premium] - Tarih [30 (July 2026)] i\u00e7in form dolduruluyor...", "proxy": ""}
+{"timestamp": 1772737682.9447346, "level": "INFO", "user_id": 2, "message": "  Zaten slot se\u00e7im sayfas\u0131nday\u0131z, URL reload atlan\u0131yor.", "proxy": ""}
+{"timestamp": 1772737682.9514382, "level": "INFO", "user_id": 2, "message": "  Takvim/Slot se\u00e7imi ad\u0131m\u0131nday\u0131z...", "proxy": ""}
+{"timestamp": 1772737682.9529512, "level": "INFO", "user_id": 2, "message": "  Kendo takvimde gun seciliyor: day_num='30' | target_date='30 (July 2026)' | target_month='July 2026'", "proxy": ""}
+{"timestamp": 1772737682.9547467, "level": "INFO", "user_id": 2, "message": "  [CAL] Adim 1/3: Takvim ikonu tiklaniyor...", "proxy": ""}
+{"timestamp": 1772737683.9752095, "level": "INFO", "user_id": 2, "message": "  [CAL] Adim 2/3: 'July 2026' ayina gidiliyor...", "proxy": ""}
+{"timestamp": 1772737683.982245, "level": "DEBUG", "user_id": 2, "message": "    [NAV] Mevcut ay: 'July 2026' | Hedef: 'July 2026'", "proxy": ""}
+{"timestamp": 1772737683.9837506, "level": "INFO", "user_id": 2, "message": "  [CAL] Dogru ayda: 'July 2026'", "proxy": ""}
+{"timestamp": 1772737683.984759, "level": "INFO", "user_id": 2, "message": "  [CAL] Adim 3/3: Takvimde gun '30' aranip jQuery trigger ile tiklaniyor...", "proxy": ""}
+{"timestamp": 1772737684.012164, "level": "INFO", "user_id": 2, "message": "  [CAL] click_result: OK:30:rgb(12, 188, 135)", "proxy": ""}
+{"timestamp": 1772737684.0152977, "level": "INFO", "user_id": 2, "message": "  [CAL] Tarihe basar\u0131yla tiklandi: OK:30:rgb(12, 188, 135)", "proxy": ""}
+{"timestamp": 1772737684.0169704, "level": "INFO", "user_id": 2, "message": "  [CAL] AJAX spinner'i bekleniyor...", "proxy": ""}
+{"timestamp": 1772737685.5410507, "level": "INFO", "user_id": 2, "message": "  [SLOT] Tarih se\u00e7imi sonras\u0131 saat slotlar\u0131n\u0131n y\u00fcklenmesi bekleniyor...", "proxy": ""}
+{"timestamp": 1772737686.5586672, "level": "INFO", "user_id": 2, "message": "  [SLOT] Saat dropdown'u haz\u0131r!", "proxy": ""}
+{"timestamp": 1772737689.0604508, "level": "INFO", "user_id": 2, "message": "  [SLOT] Saat dropdown'u a\u00e7\u0131l\u0131yor...", "proxy": ""}
+{"timestamp": 1772737689.093386, "level": "INFO", "user_id": 2, "message": "  [SLOT] Dropdown acildi: opened:dropdown-wrap", "proxy": ""}
+{"timestamp": 1772737689.0953994, "level": "INFO", "user_id": 2, "message": "  [SLOT] Dropdown animasyonunun ve AJAX'in tamamlanmasi bekleniyor...", "proxy": ""}
+{"timestamp": 1772737689.1193917, "level": "INFO", "user_id": 2, "message": "  [SLOT] Saat basariyla secildi: SELECTED:10:00-10:30", "proxy": ""}
+{"timestamp": 1772737692.1306806, "level": "INFO", "user_id": 2, "message": "  >> Submit (Onayla) tu\u015funa Python \u00fczerinden bas\u0131l\u0131yor.", "proxy": ""}
+{"timestamp": 1772737694.8339553, "level": "INFO", "user_id": 2, "message": "  >> Submit tu\u015funa ba\u015far\u0131yla NATIVE JS ile t\u0131kland\u0131.", "proxy": ""}
+{"timestamp": 1772737698.8425806, "level": "INFO", "user_id": 2, "message": "  >> Applicant Selection sayfas\u0131 alg\u0131land\u0131.", "proxy": ""}
+{"timestamp": 1772737698.8440988, "level": "INFO", "user_id": 2, "message": "  [APPLICANT] Terms of Service / Consent Modal\u0131 kontrol ediliyor...", "proxy": ""}
+{"timestamp": 1772737700.351969, "level": "INFO", "user_id": 2, "message": "  [APPLICANT] Seyahat tarih alanlar\u0131 dolduruluyor...", "proxy": ""}
+{"timestamp": 1772737701.3600845, "level": "INFO", "user_id": 2, "message": "  [APPLICANT] Aday listeden seciliyor...", "proxy": ""}
+{"timestamp": 1772737702.370091, "level": "INFO", "user_id": 2, "message": "  Stock vesikal\u0131k foto\u011fraf y\u00fckleniyor...", "proxy": ""}
+{"timestamp": 1772737705.535602, "level": "INFO", "user_id": 2, "message": "  [OTP] Aday se\u00e7im sayfas\u0131na ula\u015f\u0131ld\u0131, sistem otomatik olarak onay kodu yolluyor...", "proxy": ""}
+{"timestamp": 1772737705.5371168, "level": "INFO", "user_id": 2, "message": "  [OTP] L\u00fctfen bekleyin... E-posta adresinize (IMAP) gelen \u015fifre bekleniyor. (Maks 3 Dakika)", "proxy": ""}
+{"timestamp": 1772737705.5533433, "level": "INFO", "user_id": 2, "message": "  [OTP] Uygulama \u015eifresi kutusunda Y\u00f6nlendirme Maili (Alias) alg\u0131land\u0131: fthctlcm2004@gmail.com", "proxy": ""}
+{"timestamp": 1772737705.5546908, "level": "INFO", "user_id": 2, "message": "  [OTP] IMAP \u015eifresi Kontrol\u00fc: Uzunluk=16, Ba\u015f/Son=ck***oj", "proxy": ""}
+{"timestamp": 1772737706.1761568, "level": "INFO", "user_id": 2, "message": "  [OTP] IMAP ba\u011flant\u0131s\u0131 ba\u015far\u0131l\u0131: fthctlcm2004@gmail.com \u2192 imap.gmail.com", "proxy": ""}
+{"timestamp": 1772737706.1776626, "level": "INFO", "user_id": 2, "message": "  [OTP] OTP bekleniyor... (180sn limit)", "proxy": ""}
+{"timestamp": 1772737707.2361479, "level": "INFO", "user_id": 2, "message": "  [OTP] \u2705 HEDEF YAKALANDI: OTP bulundu -> 368618", "proxy": ""}
+{"timestamp": 1772737707.3503575, "level": "INFO", "user_id": 2, "message": "  [OTP] \u2705 Gelen Kutusu (IMAP) \u00dczerinden \u015eifre Ba\u015far\u0131yla Okundu: 368618", "proxy": ""}
+{"timestamp": 1772737707.3523567, "level": "INFO", "user_id": 2, "message": "  [OTP] \u015eifre ekrana giriliyor...", "proxy": ""}
+{"timestamp": 1772737709.4834602, "level": "DEBUG", "user_id": 2, "message": "  [OTP] Selenium fallback hatas\u0131: Message: element click intercepted: Element is not clickable at point (762, -256)\n  (Session info: chrome=145.0.7632.117)\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff74a2faa55\n\t0x7ff74a058630\n\t0x7ff749ded75d\n\t0x7ff749e50b65\n\t0x7ff749e4e27a\n\t0x7ff749e4b115\n\t0x7ff749e49fc7\n\t0x7ff749e3b426\n\t0x7ff749e719da\n\t0x7ff749e3aca6\n\t0x7ff749e9591c\n\t0x7ff749e39098\n\t0x7ff749e39f83\n\t0x7ff74a327810\n\t0x7ff74a321afd\n\t0x7ff74a342c1a\n\t0x7ff74a073345\n\t0x7ff74a07b81c\n\t0x7ff74a061924\n\t0x7ff74a061ad6\n\t0x7ff74a047e47\n\t0x7ffdf8a9e8d7\n\t0x7ffdf9f4c40c\n", "proxy": ""}
+{"timestamp": 1772737711.6084423, "level": "INFO", "user_id": 2, "message": "  >> Submit/Proceed (Applicant Selection) butonuna bas\u0131l\u0131yor.", "proxy": ""}
+{"timestamp": 1772737717.8431141, "level": "WARNING", "user_id": 2, "message": "Randevu al\u0131m\u0131 onay sayfas\u0131na ula\u015famad\u0131. Kalan URL: https://turkey.blsspainglobal.com/global/appointment/applicantselection", "proxy": ""}
+{"timestamp": 1772737717.8453412, "level": "WARNING", "user_id": 2, "message": "\u274c Otomatik randevu al\u0131namad\u0131 (slot kapanm\u0131\u015f olabilir).", "proxy": ""}
+{"timestamp": 1772737717.846399, "level": "INFO", "user_id": 2, "message": "Randevu bulundu\u011fu i\u00e7in bot beklemeye al\u0131nd\u0131 (1 Saat).", "proxy": ""}

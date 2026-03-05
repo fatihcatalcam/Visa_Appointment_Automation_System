@@ -289,9 +289,14 @@ class WorkerThread(threading.Thread):
                     else:
                         self._log(logging.INFO, "Oto-randevu kapalı. Manuel işlem bekleniyor.")
                     
-                    # Bulduktan sonra bu botu bekletmeye al
-                    self._log(logging.INFO, "Randevu bulunduğu için bot beklemeye alındı (1 Saat).")
-                    self._wait(3600)
+                    # Randevu başarıyla alındıysa botu durdur
+                    if book_result:
+                        self._log(logging.INFO, "🛑 Randevu başarıyla alındığı için bot durduruluyor.")
+                        self.stop_requested = True
+                        return
+                    else:
+                        self._log(logging.INFO, "Randevu bulunamadı ama slot vardı, tekrar denenecek.")
+                        self._wait(30)
                 else:
                     msg = result.get("message", "")
                     self._log(logging.INFO, f"Randevu yok. Neden: {msg}")

@@ -1972,60 +1972,72 @@ class BLSScraper:
                 self._log(logging.INFO, "  >> Applicant Selection sayfası algılandı.")
 
                 try:
-                    # HATA DÜZELTME: Travel Date, Arrival Date, Departure Date Doldurma (JS Injection ile)
-                    self._log(logging.INFO, "  Aday seçimi sayfasındaki yeni seyahat tarih alanları dolduruluyor...")
+                    # 1. HATA DÜZELTME: Consent (Terms of Service) Modal'ını Kapatma
+                    self._log(logging.INFO, "  [APPLICANT] Terms of Service / Consent Modalı kontrol ediliyor...")
                     self.driver.execute_script("""
                         try {
-                            // Find all datepickers on this page
-                            var datePickers = document.querySelectorAll("input[data-role='datepicker']");
+                            var consentBtn = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"], a.btn')).find(el => {
+                                var txt = (el.innerText || el.value || '').toLowerCase();
+                                return txt.includes('i agree') || txt.includes('accept') || txt.includes('kabul');
+                            });
                             
-                            // Let's assume the appointment is today physically for the sake of calculation length
+                            if (consentBtn) {
+                                var rect = consentBtn.getBoundingClientRect();
+                                if (rect.width > 0 && rect.height > 0) {
+                                    consentBtn.scrollIntoView({block: 'center', behavior: 'instant'});
+                                    consentBtn.click();
+                                    return true;
+                                }
+                            }
+                        } catch(e) {}
+                        return false;
+                    """)
+                    time.sleep(1.5) # Modal kapanma animasyonu
+
+                    # 2. HATA DÜZELTME: Travel Date, Arrival Date, Departure Date Doldurma (JS Injection ile)
+                    self._log(logging.INFO, "  [APPLICANT] Seyahat tarih alanları dolduruluyor...")
+                    self.driver.execute_script("""
+                        try {
+                            var datePickers = document.querySelectorAll("input[data-role='datepicker']");
                             var today = new Date();
                             
-                            // Travel Date: +30 Days
-                            var travelDate = new Date();
-                            travelDate.setDate(today.getDate() + 30);
-                            
-                            // Departure Date: +60 Days
-                            var depDate = new Date();
-                            depDate.setDate(today.getDate() + 60);
+                            var travelDate = new Date(); travelDate.setDate(today.getDate() + 30);
+                            var depDate = new Date(); depDate.setDate(today.getDate() + 60);
 
-                            // Set values if they exist
                             for (var i = 0; i < datePickers.length; i++) {
                                 var widget = $(datePickers[i]).data("kendoDatePicker");
                                 if (widget) {
                                     var inputId = datePickers[i].id.toLowerCase();
                                     if (inputId.indexOf("travel") !== -1 || inputId.indexOf("arrival") !== -1) {
-                                        widget.value(travelDate);
-                                        widget.trigger("change");
+                                        widget.value(travelDate); widget.trigger("change");
                                     } else if (inputId.indexOf("departure") !== -1) {
-                                        widget.value(depDate);
-                                        widget.trigger("change");
+                                        widget.value(depDate); widget.trigger("change");
                                     } else {
-                                        // Default fallback fallback
-                                        widget.value(travelDate);
-                                        widget.trigger("change");
+                                        widget.value(travelDate); widget.trigger("change");
                                     }
                                 }
                             }
-                        } catch(e) {
-                            console.error('Travel Date Injection Error', e);
-                        }
+                        } catch(e) { }
                     """)
                     time.sleep(1)
 
-                    # Adayı (Örnek: "1 Person") seçmek (RadioButton) JS ile
-                    self._log(logging.INFO, "  Aday radio butonu aktif ediliyor...")
+                    # 3. HATA DÜZELTME: Adayı Listeden Seçmek (RadioButton - ApplicantId)
+                    self._log(logging.INFO, "  [APPLICANT] Aday listeden seciliyor...")
                     self.driver.execute_script("""
                         try {
-                            var radios = document.querySelectorAll("input[type='radio']");
+                            // Genellikle name="ApplicantId" veya type="radio" olur
+                            var radios = document.querySelectorAll("input[type='radio'][name*='ApplicantId'], input[type='radio']");
                             for (var i = 0; i < radios.length; i++) {
-                                if (radios[i].value === "1") {
+                                var r = radios[i].getBoundingClientRect();
+                                if (r.width > 0 && r.height > 0) {
+                                    radios[i].scrollIntoView({block: 'center', behavior: 'instant'});
                                     radios[i].click();
-                                    break;
+                                    if (typeof $ !== 'undefined') { $(radios[i]).trigger('change'); }
+                                    return true;
                                 }
                             }
                         } catch (e) {}
+                        return false;
                     """)
                     time.sleep(1)
 

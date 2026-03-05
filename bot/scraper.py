@@ -1104,13 +1104,13 @@ class BLSScraper:
                 def _try_pick(keywords, val, name, mandatory=True):
                     if not val:
                         return True
-                    for attempt in range(4): # 4 deneme (yaklaşık 6s)
+                    for attempt in range(3): # 3 deneme (yaklaşık 3s)
                         if click_container_by_keywords(keywords):
-                            time.sleep(0.5)
+                            time.sleep(0.3)
                             if select2_pick(val, name):
                                 return True
-                        logger.warning(f"  ⏳ {name} açılması bekleniyor... (Deneme {attempt+1}/4)")
-                        time.sleep(1.5)
+                        logger.warning(f"  ⏳ {name} açılması bekleniyor... (Deneme {attempt+1}/3)")
+                        time.sleep(0.7)
                     
                     # Eğer 4 denemede de olmadıysa
                     if mandatory:
@@ -1123,7 +1123,7 @@ class BLSScraper:
                 if not _try_pick(["Jurisdiction", "İl", "City"], jurisdiction, "Jurisdiction", mandatory=True):
                     if form_attempt < max_form_retries - 1: continue
                     else: return False
-                time.sleep(0.3)
+                time.sleep(0.15)
                 # B) Appointment For (Radio) - Arayüzde yer değişebilir, tekrar bulalım
                 for radio_attempt in range(4):
                     try:
@@ -1149,41 +1149,41 @@ class BLSScraper:
                             break
                         else:
                             logger.warning(f"  ⏳ Appointment For bekleniyor... ({radio_attempt+1}/4)")
-                            time.sleep(1.5)
+                            time.sleep(0.7)
                     except: 
-                        time.sleep(1.5)
-                time.sleep(0.2)
+                        time.sleep(0.7)
+                time.sleep(0.1)
                 # C) Location (Opsiyonel / Dinamik)
                 if location:
                     logger.info(f"  → Location: {location}")
                     if not _try_pick(["Location", "Konum"], location, "Location", mandatory=True):
                         if form_attempt < max_form_retries - 1: continue
                         else: return False
-                    time.sleep(0.3)
+                    time.sleep(0.15)
                 # D) Visa Type
                 logger.info(f"  → Visa Type: {visa_type}")
                 if not _try_pick(["Visa Type", "Vize Türü"], visa_type, "Visa Type", mandatory=True):
                     if form_attempt < max_form_retries - 1: continue
                     else: return False
-                time.sleep(0.3)
+                time.sleep(0.15)
                 # E) Visa Sub Type (Opsiyonel)
                 if visa_sub_type:
                     logger.info(f"  → Sub Type: {visa_sub_type}")
                     _try_pick(["Sub Type", "Alt Tür"], visa_sub_type, "Sub Type", mandatory=False)
-                    time.sleep(0.3)
+                    time.sleep(0.15)
                 # F) Category
                 if category:
                     logger.info(f"  → Category: {category}")
                     _try_pick(["Category", "Kategori"], category, "Category", mandatory=False)
-                    time.sleep(0.5)
+                    time.sleep(0.3)
                     self._handle_premium_popup()
-                    time.sleep(0.5)
+                    time.sleep(0.3)
                 # Submit
                 btn = self._find_visible_button(["Submit", "submit", "Ara", "Search"])
                 if btn:
                     logger.info("  Submit ediliyor...")
                     self.driver.execute_script("arguments[0].click();", btn)
-                    time.sleep(3)
+                    time.sleep(1.5)
                 
                 return True  # Form successfully filled
             # All retries exhausted (shouldn't reach here, but safety net)

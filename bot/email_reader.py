@@ -46,24 +46,25 @@ class OTPReader:
         # otp = "986501"
     """
     
-    def __init__(self, email_address: str, app_password: str, imap_server: str = None):
+    def __init__(self, email_address: str, app_password: str, imap_server: str = None, log_func=None):
         self.email_address = email_address
         self.app_password = app_password
         self.imap_server = imap_server or _detect_imap_server(email_address)
         self._mail = None
+        self._log = log_func or (lambda lvl, msg: logger.log(lvl, msg))
     
     def _connect(self):
         """IMAP sunucusuna bağlan."""
         try:
             self._mail = imaplib.IMAP4_SSL(self.imap_server, 993)
             self._mail.login(self.email_address, self.app_password)
-            logger.info(f"📧 IMAP bağlantısı başarılı: {self.email_address} → {self.imap_server}")
+            self._log(logging.INFO, f"IMAP bağlantısı başarılı: {self.email_address} → {self.imap_server}")
             return True
         except imaplib.IMAP4.error as e:
-            logger.error(f"📧 IMAP giriş hatası: {e}")
+            self._log(logging.ERROR, f"🚨 IMAP giriş hatası (Şifre yanlış veya IMAP erişimi kapalı): {e}")
             return False
         except Exception as e:
-            logger.error(f"📧 IMAP bağlantı hatası ({self.imap_server}): {e}")
+            self._log(logging.ERROR, f"🚨 IMAP bağlantı hatası ({self.imap_server}): {e}")
             return False
     
     def _disconnect(self):
@@ -78,34 +79,27 @@ class OTPReader:
     def wait_for_otp(self, timeout: int = 120, poll_interval: int = 5) -> str:
         """
         BLS OTP e-mailini bekle ve 6 haneli kodu döndür.
-        
-        Args:
-            timeout: Maksimum bekleme süresi (saniye)
-            poll_interval: Kontrol aralığı (saniye)
-        
-        Returns:
-            6 haneli OTP kodu veya None (timeout)
         """
         if not self._connect():
             return None
         
         start_time = time.time()
-        logger.info(f"📧 OTP bekleniyor... ({timeout}sn timeout)")
+        self._log(logging.INFO, f"OTP bekleniyor... ({timeout}sn limit)")
         
         try:
             while time.time() - start_time < timeout:
                 otp = self._check_for_otp()
                 if otp:
-                    logger.info(f"📧 ✅ OTP bulundu: {otp}")
+                    self._log(logging.INFO, f"✅ HEDEF YAKALANDI: OTP bulundu -> {otp}")
                     return otp
                 
                 elapsed = int(time.time() - start_time)
                 if elapsed % 15 == 0 and elapsed > 0:
-                    logger.info(f"📧 OTP aranıyor... ({elapsed}sn geçti)")
+                    self._log(logging.INFO, f"Gelen Kutusu (IMAP) taranıyor... ({elapsed}sn geçti)")
                 
                 time.sleep(poll_interval)
             
-            logger.warning(f"📧 ⏰ OTP {timeout}sn içinde bulunamadı (timeout)")
+            self._log(logging.ERROR, f"❌ OTP süresi doldu ({timeout}sn).")
             return None
         finally:
             self._disconnect()

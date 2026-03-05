@@ -817,19 +817,32 @@ class BLSScraper:
                 captcha_solved = False
                 try:
                     self._log(logging.INFO, "  Form sonrası CAPTCHA kontrolü yapılıyor...")
-                    captcha_solved = self._check_and_solve_captcha()
-                    if captcha_solved:
-                        self._log(logging.INFO, "  CAPTCHA çözüldü, takvim yüklenmesi bekleniyor...")
-                        time.sleep(2)  # Takvimin yüklenmesi için ekstra bekleme
+                    for captcha_retry in range(3):
+                        solved_attempt = self._check_and_solve_captcha()
+                        if not solved_attempt:
+                            self._log(logging.WARNING, "  CAPTCHA çözme metodunda hata oluştu (atlandı).")
+                            break
+                        
+                        time.sleep(3)  # Sayfanın yenilenmesi veya yönlenmesi için bekle
+                        
+                        # Artık takvim sayfasına (apptsloti) başarıyla geçtik mi? Veya Captcha yok oldu mu?
+                        from bot.captcha_solver import CaptchaSolver
+                        checker = CaptchaSolver(self.driver, api_key=self.config.get("2captcha_key", "").strip())
+                        
+                        if "apptsloti" in self.driver.current_url.lower():
+                            self._log(logging.INFO, "  ✅ Takvim sayfasına başarıyla geçildi.")
+                            captcha_solved = True
+                            break
+                            
+                        if not checker.is_captcha_present():
+                            self._log(logging.INFO, "  ✅ Ekranda CAPTCHA kalmadı, takvim aranıyor...")
+                            captcha_solved = True
+                            break
+                            
+                        self._log(logging.WARNING, f"  ⚠️ CAPTCHA ekranda kalmaya devam ediyor! Yanlış çözüldü veya sayfa yenilendi. Tekrar deneniyor... ({captcha_retry+1}/3)")
+                    
                 except Exception as ce:
                     self._log(logging.WARNING, f"Post-submit CAPTCHA hatası: {ce}")
-                # Eğer CAPTCHA çıktı ama çözülemediyse, tarih aramayı atla
-                # DÜZELTME: is_captcha_present() HTML'de div'i aradığı için çözülmüş AMA gizlenmiş (display: none)
-                # CAPTCHA'ları da "ekranda" sanıp takvimi iptal ediyor. Bu katı kontrolü kaldırıyoruz.
-                # from bot.captcha_solver import CaptchaSolver
-                # post_solver = CaptchaSolver(self.driver, api_key=self.config.get("2captcha_key", "").strip())
-                # if post_solver.is_captcha_present():
-                #     self._log(logging.WARNING, f"  ⚠️ CAPTCHA hala ekranda görünüyor! (DOM gizli olabilir). Tarih aramasına geçiliyor...")
                 
                 # Müsait tarih kontrolü
                 available_dates = self._find_available_dates()
@@ -925,7 +938,7 @@ class BLSScraper:
                     except: pass
                     search_norm = normalize_tr(search_value)
                     # A. Standart
-                    opts = self.driver.find_elements(By.CSS_CSS_SELECTOR, ".select2-results__option:not(.select2-results__option--disabled)")
+                    opts = self.driver.find_elements(By.CSS_SELECTOR, ".select2-results__option:not(.select2-results__option--disabled)")
                     visible = [o for o in opts if o.is_displayed()]
                     if visible:
                         opts_text = [o.text.strip() for o in visible[:5]]
@@ -1736,6 +1749,12 @@ class BLSScraper:
                     # ─── ADIM 4: AJAX'IN BİTMESİNİ BEKLE ─────────────────────────────
                     # blockUI spinner kaybolunca AJAX tamamdır - time.sleep değil, WebDriverWait!
                     self._log(logging.INFO, "  [CAL] AJAX spinner'i bekleniyor...")
+                    
+                    # SPINNER YAKALAMA HATASI DÜZELTME:
+                    # Tarihe tıkladıktan sonra sitenin "Yükleniyor" ekranını çıkarması bazen 1 sn sürüyor.
+                    # Eğer beklemeden invisibility (Görünmez mi?) diye sorarsak Selenium "Evet henüz ekranda yok!" deyip anında geçer.
+                    time.sleep(1.5) 
+                    
                     try:
                         WebDriverWait(self.driver, 15).until(
                             EC.invisibility_of_element_located((By.CSS_SELECTOR, ".blockUI.blockOverlay"))
@@ -1754,6 +1773,8 @@ class BLSScraper:
 
                     # 5. Saat Seçimi - Önce AJAX'ın bitmesini ve slotların yüklenmesini bekle
                     self._log(logging.INFO, "  [SLOT] Tarih seçimi sonrası saat slotlarının yüklenmesi bekleniyor...")
+                    
+                    time.sleep(1.0) # Yukarıdaki delay yetmemiş olabilir diye ekstra güvenlik
                     
                     # Loading spinner kaybolunca AJAX bitti
                     try:
@@ -1922,12 +1943,20 @@ class BLSScraper:
                         if isinstance(slot_selected, str) and slot_selected.startswith('SELECTED'):
                             self._log(logging.INFO, f"  [SLOT] Saat basariyla secildi: {slot_selected}")
                             slot_selected = True
+                            # Kendo UI'ın slot seçimini kaydetmesi için gölge eventleri tetikleyelim
+                            self.driver.execute_script("""
+                                try {
+                                    var dd = document.querySelector('select#ddlAppointmentSlot, input#ddlAppointmentSlot');
+                                    if(dd && typeof $ !== 'undefined') { $(dd).trigger('change'); }
+                                } catch(e){}
+                            """)
                         else:
                             self._log(logging.WARNING, f"  [SLOT] Saat secilemedi. Debug sonucu: {slot_selected}")
                             slot_selected = False
 
                     
-                    time.sleep(1)
+                    # Submit butonuna basmadan önce UI'ın seçimi sindirmesi için 3 saniye bekle
+                    time.sleep(3)
                     
                     if date_clicked and slot_selected:
                         self._log(logging.INFO, "  >> Submit (Onayla) tuşuna Python üzerinden basılıyor.")
@@ -2084,9 +2113,24 @@ class BLSScraper:
                         email_address = self.user_data.get("email")
                         app_password  = self.user_data.get("email_app_password")
                         
+                        # 🚨 IMAP YÖNLENDİRME (ALIAS) DESTEĞİ 🚨
+                        # Eğer kullanıcı şifre kutusuna "fthctlcm2004@gmail.com:ckfszpqdeycyljoj" 
+                        # formatında girdiyse, BLS Login için asıl maili (Outlook) kullanmaya devam edip 
+                        # OTP okuması (IMAP) için bu kutudaki yazan Gmail'i kullanacağız.
+                        if app_password and ":" in app_password:
+                            parts = app_password.split(":", 1)
+                            if "@" in parts[0]:
+                                email_address = parts[0].strip()
+                                app_password = parts[1].replace(" ", "").strip()
+                                self._log(logging.INFO, f"  [OTP] Uygulama Şifresi kutusunda Yönlendirme Maili (Alias) algılandı: {email_address}")
+
                         if not email_address or not app_password:
                             self._log(logging.ERROR, "  [OTP] ❌ IMAP için E-posta adresi veya Uygulama Şifresi ayarlanmamış! Otomatik okuma yapılamaz.")
                         else:
+                            # Şifre gerçekten çözüldü mü yoksa şifreli (b'gAAAA...') veya yanlış mı geliyor, güvenlik açısından maskeleyip görelim.
+                            masked_pw = f"{app_password[:2]}***{app_password[-2:]}" if len(app_password) > 4 else "***"
+                            self._log(logging.INFO, f"  [OTP] IMAP Şifresi Kontrolü: Uzunluk={len(app_password)}, Baş/Son={masked_pw}")
+
                             # Ekrana basılan hatayı kolayca izlemek için bir hook verelim
                             def otp_log_hook(lvl, msg):
                                 self._log(lvl, f"  [OTP] {msg}")
@@ -2098,22 +2142,38 @@ class BLSScraper:
                                 self._log(logging.INFO, f"  [OTP] ✅ Gelen Kutusu (IMAP) Üzerinden Şifre Başarıyla Okundu: {otp_code}")
                                 self._log(logging.INFO, "  [OTP] Şifre ekrana giriliyor...")
                                 
-                                # Kendo NumericTextBox veya maskeli inputlara karşı direkt JS injection en güvenlisidir
+                                # Subagent onayı: Kutu id'si "EmailCode" ve Kendo Widgetı değil.
                                 js_inject_otp = f"""
                                     try {{
-                                        // BLS genelde 'OTP' veya 'OTPCode' ID'si kullanır
-                                        var otpInput = document.getElementById('OTP') || document.getElementById('OTPCode') || document.querySelector('input[name*="OTP"]');
-                                        if(otpInput) {{
+                                        var otpInput = document.getElementById('EmailCode') || document.getElementById('OTPCode') || document.querySelector('input[name*="EmailCode"]');
+                                        if (otpInput) {{
                                             otpInput.value = '{otp_code}';
                                             otpInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
                                             otpInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                                            otpInput.dispatchEvent(new Event('blur', {{ bubbles: true }}));
                                             return true;
                                         }}
                                     }} catch(e) {{}}
                                     return false;
                                 """
                                 self.driver.execute_script(js_inject_otp)
-                                time.sleep(1.5)
+                                time.sleep(1.0)
+                                
+                                # 3. Selenium Fallback (JS'nin tetikleyemediği backend dinleyicileri için)
+                                try:
+                                    otp_elem = self._find_element_multi([
+                                        (By.ID, "EmailCode"), (By.ID, "OTPCode"), (By.XPATH, "//input[contains(@name, 'EmailCode')]")
+                                    ], timeout=2)
+                                    if otp_elem:
+                                        otp_elem.click()
+                                        time.sleep(0.5)
+                                        otp_elem.send_keys(Keys.CONTROL + "a")
+                                        otp_elem.send_keys(Keys.DELETE)
+                                        otp_elem.send_keys(otp_code)
+                                        self._log(logging.INFO, "  [OTP] Selenium fallback ile OTP yazıldı.")
+                                        time.sleep(0.5)
+                                except Exception as e:
+                                    self._log(logging.DEBUG, f"  [OTP] Selenium fallback hatası: {e}")
                                 
                                 # Verify Butonu Yoksa da sorun değil, bazen otomatik geçiyor. 
                                 # Yeni sistemde genelde "Verify OTP" veya "btnVerifyOTP" id'si olur.

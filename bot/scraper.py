@@ -1,8 +1,7 @@
-"""
+﻿"""
 BLS Spain Visa Bot - Scraper Module
 Selenium tabanlı web scraping ve otomasyon motoru
 """
-
 import os
 import time
 import logging
@@ -24,19 +23,16 @@ from bot.telemetry import (
     METRIC_403_ERRORS, METRIC_PAGE_LOAD_LATENCY, METRIC_BOOKING_SUCCESS
 )
 logger = logging.getLogger(__name__)
-
-
 class BLSScraper:
     """BLS Spain Visa sitesi için Selenium scraper"""
-
     LOGIN_URL = "https://turkey.blsspainglobal.com/Global/account/login"
     REGISTER_URL = "https://turkey.blsspainglobal.com/Global/account/register"
     APPOINTMENT_URL = "https://turkey.blsspainglobal.com/Global/appointment/newappointment"
-
-    def __init__(self, user_data: dict, global_config: dict = None):
+    def __init__(self, user_data: dict, global_config: dict = None, log_func=None):
         self.user_data = user_data
         self.config = global_config or {}
         self.headless = bool(self.user_data.get('headless', True))
+        self._custom_log = log_func
         
         # Determine Proxy via ProxyManager
         # First check if the user has a hardcoded proxy, or if it was assigned dynamically
@@ -54,7 +50,11 @@ class BLSScraper:
         # B2: Cookie session path
         self._session_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'sessions')
         self._session_file = os.path.join(self._session_dir, f"{self.user_data.get('id', 0)}.json")
-
+    def _log(self, level, msg):
+        if self._custom_log:
+            self._custom_log(level, msg)
+        else:
+            logger.log(level, f"[{self.user_data.get('first_name', 'Bilinmiyor')}] {msg}")
     def _generate_fingerprint(self):
         """Generates a consistent, semi-random fingerprint based on user_id"""
         import random
@@ -81,55 +81,85 @@ class BLSScraper:
         res = random.choice(resolutions)
         
         return ua, res
-
     def start_driver(self):
         """Chrome WebDriver'ı başlat"""
         try:
             ua, res = self._generate_fingerprint()
             
             if self.headless:
-                logger.info(f"[{self.user_data.get('first_name', 'Bilinmiyor')}] Gizli (Stealth Headless) modda başlatılıyor... [UA: Chrome {ua.split('Chrome/')[1].split(' ')[0]}]")
+                self._log(logging.INFO, f"Gizli (Stealth Headless) modda başlatılıyor... [UA: Chrome {ua.split('Chrome/')[1].split(' ')[0]}]")
                 import undetected_chromedriver as uc
+                import re
                 
-                options = uc.ChromeOptions()
-                options.add_argument("--no-sandbox")
-                options.add_argument("--disable-dev-shm-usage")
-                options.add_argument(f"--window-size={res}")
-                if self.proxy:
-                    if "@" in self.proxy:
-                        from bot.proxy_auth import create_proxy_extension
-                        ext_path = create_proxy_extension(self.proxy)
-                        if ext_path:
-                            # undetected-chromedriver extension paths must be comma separated
-                            options.add_argument(f"--load-extension={ext_path.replace('.zip', '')}")
-                            # Need to extract it for undetected_chromedriver or use add_extension if it works,
-                            # actually uc works better with unpacked. Let's modify the auth generator slightly or just pass the zip.
-                            # Standard Selenium uses add_extension for zip. UC prefers load-extension for unpacked.
-                            # We will use the zip approach with standard options.
-                            options.add_extension(ext_path)
-                            logger.info(f"[{self.user_data.get('first_name', 'Bilinmiyor')}] Auth-Proxy Eklentisi Yüklendi.")
-                    else:
-                        options.add_argument(f"--proxy-server={self.proxy}")
-                        logger.info(f"[{self.user_data.get('first_name', 'Bilinmiyor')}] Proxy Aktif: {self.proxy}")
-                options.add_argument(f"user-agent={ua}")
-                
-                options.add_argument("--disable-gpu")
-                options.add_argument("--enable-javascript")
-                
-                # Retry logic for known 'target window already closed' headless crash
                 max_retries = 3
+                
+                # Proactively detect installed Chrome version to avoid mismatch
+                version_main = None
+                try:
+                    import subprocess
+                    reg_result = subprocess.run(
+                        ['reg', 'query', r'HKEY_CURRENT_USER\Software\Google\Chrome\BLBeacon', '/v', 'version'],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    match = re.search(r'(\d+)\.', reg_result.stdout)
+                    if match:
+                        version_main = int(match.group(1))
+                        self._log(logging.INFO, f"Chrome v{version_main} algılandı, uyumlu driver kullanılacak.")
+                except Exception:
+                    pass
+                
                 for attempt in range(max_retries):
+                    options = uc.ChromeOptions()
+                    options.add_argument("--no-sandbox")
+                    options.add_argument("--disable-dev-shm-usage")
+                    options.add_argument(f"--window-size={res}")
+                    options.add_argument("--disable-extensions")
+                    options.add_argument("--disable-background-networking")
+                    options.add_argument("--disable-default-apps")
+                    options.add_argument("--mute-audio")
+                    options.add_argument("--js-flags=--max-old-space-size=256")
+                    
+                    if self.proxy:
+                        if "@" in self.proxy:
+                            from bot.proxy_auth import create_proxy_extension
+                            ext_path = create_proxy_extension(self.proxy)
+                            if ext_path:
+                                options.add_extension(ext_path)
+                                if attempt == 0: self._log(logging.INFO, "Auth-Proxy Eklentisi Yüklendi.")
+                        else:
+                            options.add_argument(f"--proxy-server={self.proxy}")
+                            if attempt == 0: self._log(logging.INFO, f"Proxy Aktif: {self.proxy}")
+                    
+                    options.add_argument(f"user-agent={ua}")
+                    options.add_argument("--disable-gpu")
+                    options.add_argument("--enable-javascript")
+                    
                     try:
-                        self.driver = uc.Chrome(options=options, headless=True, use_subprocess=True)
+                        kwargs = {"options": options, "headless": True, "use_subprocess": True}
+                        if version_main:
+                            kwargs["version_main"] = version_main
+                            
+                        self.driver = uc.Chrome(**kwargs)
                         break
                     except Exception as try_err:
                         if attempt == max_retries - 1:
                             raise try_err
-                        logger.warning(f"[{self.user_data.get('first_name')}] Headless tarayıcı çöktü, tekrar deneniyor ({attempt+1}/{max_retries}): {try_err}")
+                        
+                        err_str = str(try_err)
+                        match = re.search(r"Current browser version is (\d+)", err_str)
+                        if match:
+                            version_main = int(match.group(1))
+                            self._log(logging.INFO, f"Driver version mismatch. Forcing version_main={version_main}, clearing cache...")
+                            # Clear stale cached chromedriver to force fresh download
+                            import shutil, pathlib
+                            cache_dir = pathlib.Path.home() / "appdata" / "roaming" / "undetected_chromedriver"
+                            if cache_dir.exists():
+                                shutil.rmtree(cache_dir, ignore_errors=True)
+                            
+                        self._log(logging.WARNING, f"Headless tarayıcı çöktü, tekrar deneniyor ({attempt+1}/{max_retries}): {try_err}")
                         time.sleep(2)
-
             else:
-                logger.info(f"[{self.user_data.get('first_name', 'Bilinmiyor')}] Normal (Görünür) Chrome başlatılıyor... [UA: Chrome {ua.split('Chrome/')[1].split(' ')[0]}]")
+                self._log(logging.INFO, f"Normal (Görünür) Chrome başlatılıyor... [UA: Chrome {ua.split('Chrome/')[1].split(' ')[0]}]")
                 options = Options()
                 options.add_argument("--no-sandbox")
                 options.add_argument("--disable-dev-shm-usage")
@@ -140,10 +170,10 @@ class BLSScraper:
                         ext_path = create_proxy_extension(self.proxy)
                         if ext_path:
                             options.add_extension(ext_path)
-                            logger.info(f"[{self.user_data.get('first_name', 'Bilinmiyor')}] Auth-Proxy Eklentisi Yüklendi.")
+                            self._log(logging.INFO, "Auth-Proxy Eklentisi Yüklendi.")
                     else:
                         options.add_argument(f"--proxy-server={self.proxy}")
-                        logger.info(f"[{self.user_data.get('first_name', 'Bilinmiyor')}] Proxy Aktif: {self.proxy}")
+                        self._log(logging.INFO, f"Proxy Aktif: {self.proxy}")
                 options.add_experimental_option("excludeSwitches", ["enable-automation"])
                 options.add_experimental_option("useAutomationExtension", False)
                 options.add_argument(f"--window-size={res}")
@@ -176,17 +206,16 @@ class BLSScraper:
                         renderer=renderer,
                         fix_hairline=True,
                         )
-                logger.info(f"[{self.user_data.get('first_name', 'Bilinmiyor')}] Stealth JS Enjekte Edildi.")
+                self._log(logging.INFO, "Stealth JS Enjekte Edildi.")
             except ImportError:
-                logger.warning("selenium-stealth kütüphanesi bulunamadı, standart ayarlar ile devam ediliyor.")
+                self._log(logging.WARNING, "selenium-stealth kütüphanesi bulunamadı, standart ayarlar ile devam ediliyor.")
                 
             self.wait = WebDriverWait(self.driver, 20)
-            logger.info("Chrome WebDriver başlatıldı (Network Loglama Aktif)")
+            self._log(logging.INFO, "Chrome WebDriver başlatıldı (Network Loglama Aktif)")
             return True
         except Exception as e:
-            logger.error(f"WebDriver başlatma hatası: {e}")
+            self._log(logging.ERROR, f"WebDriver başlatma hatası: {e}")
             return False
-
     def dump_network_logs(self):
         """Performans loglarını JSON dosyasına kaydeder (API Analizi için)"""
         try:
@@ -205,7 +234,7 @@ class BLSScraper:
                         # Sadece XHR/Fetch/Document isteklerini al (Resim/CSS gerek yok)
                         type_ = msg["params"].get("type", "") or msg["params"].get("request", {}).get("type", "") # Bazen type request içinde
                         #if type_ in ["XHR", "Fetch", "Document"]:
-                        filtered_logs.append(msg) # Şimdilik hepsini alalım, endpoint'i kaçırmayalım
+                        filtered_logs.append(msg) # Ã…imdilik hepsini alalım, endpoint'i kaçırmayalım
                 except: pass
             
             with open("network_activity.json", "w", encoding="utf-8") as f:
@@ -214,9 +243,8 @@ class BLSScraper:
             logger.info(f"✅ Network logları kaydedildi: network_activity.json ({len(filtered_logs)} olay)")
         except Exception as e:
             logger.error(f"Log dump hatası: {e}")
-
     def stop_driver(self):
-        """WebDriver'ı kapat — çıkmadan önce cookie'leri kaydet"""
+        """WebDriver'ı kapat Ã¢â‚¬â€ çıkmadan önce cookie'leri kaydet"""
         if self.driver:
             try:
                 self._save_cookies()
@@ -230,8 +258,7 @@ class BLSScraper:
             finally:
                 self.driver = None
             self.is_logged_in = False
-            logger.info("WebDriver kapatıldı")
-
+            self._log(logging.INFO, "WebDriver kapatıldı")
     def _save_cookies(self):
         """B2: Tarayıcı cookie'lerini diske kaydet"""
         if not self.driver:
@@ -242,12 +269,11 @@ class BLSScraper:
             cookies = self.driver.get_cookies()
             with open(self._session_file, 'w', encoding='utf-8') as f:
                 json.dump(cookies, f)
-            logger.info(f"🍪 {len(cookies)} cookie kaydedildi: {self._session_file}")
+            self._log(logging.INFO, f"🔍 {len(cookies)} cookie kaydedildi: {self._session_file}")
         except Exception as e:
-            logger.debug(f"Cookie kaydetme hatası: {e}")
-
+            self._log(logging.DEBUG, f"Cookie kaydetme hatası: {e}")
     def _load_cookies(self):
-        """B2: Kaydedilmiş cookie'leri yükle ve oturumun hâlâ geçerli olup olmadığını kontrol et"""
+        """B2: Kaydedilmiş cookie'leri yükle ve oturumun hÃƒÂ¢lÃƒÂ¢ geçerli olup olmadığını kontrol et"""
         if not self.driver or not os.path.exists(self._session_file):
             return False
         try:
@@ -268,7 +294,7 @@ class BLSScraper:
                 except Exception:
                     pass
             
-            logger.info(f"🍪 {len(cookies)} cookie yüklendi, oturum kontrol ediliyor...")
+            self._log(logging.INFO, f"🔍 {len(cookies)} cookie yüklendi, oturum kontrol ediliyor...")
             
             # Appointment sayfasına giderek oturum geçerliliğini test et
             self.driver.get(self.APPOINTMENT_URL)
@@ -276,20 +302,19 @@ class BLSScraper:
             
             current_url = self.driver.current_url.lower()
             if 'login' not in current_url and 'account' not in current_url:
-                logger.info("✅ Cookie oturumu geçerli! Login atlanıyor.")
+                self._log(logging.INFO, "✅ Cookie oturumu geçerli! Login atlanıyor.")
                 self.is_logged_in = True
                 return True
             else:
-                logger.info("❌ Cookie oturumu süresi dolmuş. Normal login yapılacak.")
+                self._log(logging.INFO, "❌ Cookie oturumu süresi dolmuş. Normal login yapılacak.")
                 return False
         except Exception as e:
-            logger.debug(f"Cookie yükleme hatası: {e}")
+            self._log(logging.DEBUG, f"Cookie yükleme hatası: {e}")
             return False
-
     def login(self, email: str, password: str, solve_captcha: bool = True) -> bool:
-        """BLS sitesine giriş yap — state-machine yaklaşımı"""
+        """BLS sitesine giriş yap Ã¢â‚¬â€ state-machine yaklaşımı"""
         try:
-            logger.info("Giriş yapılıyor...")
+            self._log(logging.INFO, "Giriş yapılıyor...")
             # Go to login page and measure latency
             start_time = time.time()
             self.driver.get(self.LOGIN_URL)
@@ -300,17 +325,13 @@ class BLSScraper:
             proxy_manager.report_latency(self.proxy, latency_ms)
             METRIC_PAGE_LOAD_LATENCY.observe(end_time - start_time)
             logger.info(f"Page Load Latency: {latency_ms:.0f}ms")
-
             time.sleep(2) # Anti-bot amaçlı bekleme (Site çok hızlı girişi şüpheli bulabilir)
-
-            # ── Adım 1: Email alanını bul ve doldur ──────────────────────────
+            # Ã¢â€â‚¬Ã¢â€â‚¬ Adım 1: Email alanını bul ve doldur Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
             visible_inputs = self._get_visible_text_inputs()
-            logger.info(f"Görünür input sayısı: {len(visible_inputs)}")
-
+            self._log(logging.INFO, f"Görünür input sayısı: {len(visible_inputs)}")
             if not visible_inputs:
-                logger.error("Hiç görünür input bulunamadı")
+                self._log(logging.ERROR, "Hiç görünür input bulunamadı")
                 return False
-
             email_field = visible_inputs[0]
             self.driver.execute_script(
                 "arguments[0].value = arguments[1]; "
@@ -318,38 +339,34 @@ class BLSScraper:
                 "arguments[0].dispatchEvent(new Event('change', {bubbles:true}));",
                 email_field, email
             )
-            logger.info(f"Email girildi: {email}")
+            self._log(logging.INFO, f"Email girildi: {email}")
             time.sleep(0.5)
-
-            # ── Adım 2: Verify butonu ─────────────────────────────────────────
+            # Ã¢â€â‚¬Ã¢â€â‚¬ Adım 2: Verify butonu Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
             verify_btn = self._find_visible_button(["Verify", "verify", "VERIFY"])
             if verify_btn:
-                logger.info("Verify tıklanıyor...")
+                self._log(logging.INFO, "Verify tıklanıyor...")
                 self.driver.execute_script("arguments[0].click();", verify_btn)
                 time.sleep(3)
-
-                # Erken başarı kontrolü — kullanıcı zaten giriş yaptı mı?
+                # Erken başarı kontrolü Ã¢â‚¬â€ kullanıcı zaten giriş yaptı mı?
                 if self._check_login_success():
                     return True
-
                 # CAPTCHA var mı?
                 if solve_captcha:
                     api_key = self.config.get("2captcha_key", "").strip()
                     captcha_solver = CaptchaSolver(self.driver, api_key=api_key)
                     if captcha_solver.is_captcha_present():
-                        # KRİTİK KONTROL: Şifre alanı zaten var mı?
+                        # KRİTİK KONTROL: Ã…ifre alanı zaten var mı?
                         # Eğer şifre alanı varsa, önce şifre girilmeli. Captcha'yı burda çözme!
                         if self._find_password_field():
-                            logger.info("Captcha ve Şifre alanı aynı anda tespit edildi. Önce şifre girilecek...")
+                            self._log(logging.INFO, "Captcha ve Ã…ifre alanı aynı anda tespit edildi. Önce şifre girilecek...")
                         else:
-                            logger.info("Sadece CAPTCHA var (Email onayı olabilir). Çözülüyor...")
+                            self._log(logging.INFO, "Sadece CAPTCHA var (Email onayı olabilir). Çözülüyor...")
                             captcha_solver.solve()
                             # CAPTCHA sonrası giriş başarılı mı?
                             if self._check_login_success():
                                 return True
-
                 total_wait = 60 if not solve_captcha else 20
-                logger.info(f"Şifre sayfası bekleniyor... ({total_wait/2} sn)")
+                self._log(logging.INFO, f"Ã…ifre sayfası bekleniyor... ({total_wait/2} sn)")
                 for _ in range(total_wait):
                     time.sleep(0.5)
                     if self._check_login_success():
@@ -359,17 +376,16 @@ class BLSScraper:
                         break
                     # Eğer Captcha varsa ve çözülmediyse hala bekliyor olabiliriz
                     if solve_captcha and captcha_solver.is_captcha_present() and not self._find_password_field():
-                         logger.debug("Hala Captcha var ama şifre yok...")
+                         self._log(logging.DEBUG, "Hala Captcha var ama şifre yok...")
                          
-                    logger.debug("Şifre alanı henüz yok, bekleniyor...")
-
-            # ── Adım 3: Şifre alanı ve CAPTCHA Döngüsü ───────────────────────
+                    self._log(logging.DEBUG, "Ã…ifre alanı henüz yok, bekleniyor...")
+            # Ã¢â€â‚¬Ã¢â€â‚¬ Adım 3: Ã…ifre alanı ve CAPTCHA Döngüsü Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
             # CAPTCHA yanlış girildiğinde sayfa yenilenebilir veya şifre silinebilir.
             # Bu yüzden şifre girme ve CAPTCHA çözme işlemini bir döngüde yapıyoruz.
             max_login_attempts = 3
             
             for attempt in range(max_login_attempts):
-                logger.info(f"Giriş/Şifre Denemesi: {attempt + 1}/{max_login_attempts}")
+                self._log(logging.INFO, f"Giriş/Ã…ifre Denemesi: {attempt + 1}/{max_login_attempts}")
                 
                 # Sayfanın yüklenmesi/yenilenmesi için kısa bir bekleme
                 time.sleep(1)
@@ -378,15 +394,14 @@ class BLSScraper:
                     return True
                     
                 password_field = self._find_password_field()
-
                 if not password_field:
                     if attempt == 0:
                         # İlk denemede bulamazsa, belki kullanıcıya manuel giriş için süre tanınmalı
-                        logger.warning("Şifre alanı bulunamadı — lütfen tarayıcıdan şifreyi girin (90 sn)")
+                        self._log(logging.WARNING, "Ã…ifre alanı bulunamadı Ã¢â‚¬â€ lütfen tarayıcıdan şifreyi girin (90 sn)")
                         for _ in range(90):
                             time.sleep(1)
                             if self._check_login_success():
-                                logger.info("✅ Kullanıcı manuel giriş yaptı!")
+                                self._log(logging.INFO, "✅ Kullanıcı manuel giriş yaptı!")
                                 self.is_logged_in = True
                                 return True
                             password_field = self._find_password_field()
@@ -395,10 +410,9 @@ class BLSScraper:
                                 break
                     
                     if not password_field:
-                        logger.error("Şifre alanı bulunamadı, yeniden deneniyor...")
+                        self._log(logging.ERROR, "Ã…ifre alanı bulunamadı, yeniden deneniyor...")
                         continue # Bir sonraki denemeye geç (belki sayfa yenileniyordur)
-
-                # Şifre alanı varsa doldur
+                # Ã…ifre alanı varsa doldur
                 if password_field:
                     try:
                         self.driver.execute_script(
@@ -407,56 +421,55 @@ class BLSScraper:
                             "arguments[0].dispatchEvent(new Event('change', {bubbles:true}));",
                             password_field, password
                         )
-                        logger.info("Şifre girildi")
+                        self._log(logging.INFO, "Ã…ifre girildi")
                         time.sleep(0.5)
                     except Exception as pe:
-                        logger.error(f"Şifre alanına yazılırken hata: {pe}")
+                        self._log(logging.ERROR, f"Ã…ifre alanına yazılırken hata: {pe}")
                         continue # Hata olursa tekrar dene
-
                 if not solve_captcha:
-                    logger.warning("CAPTCHA ve Şifre (Varsa) Manuel Giriş için 20 sn bekleniyor...")
+                    self._log(logging.WARNING, "CAPTCHA ve Ã…ifre (Varsa) Manuel Giriş için 20 sn bekleniyor...")
                     time.sleep(20)
                     if self._check_login_success(): return True
                     continue
-
-                # ── CAPTCHA (Şifre girildikten sonra) ──
+                # Ã¢â€â‚¬Ã¢â€â‚¬ CAPTCHA (Ã…ifre girildikten sonra) Ã¢â€â‚¬Ã¢â€â‚¬
                 api_key = self.config.get("2captcha_key", "").strip()
                 captcha_solver = CaptchaSolver(self.driver, api_key=api_key)
                 
                 if captcha_solver.is_captcha_present():
-                     logger.info("CAPTCHA çözülüyor (Şifre girildi, şimdi Submit edilecek)...")
+                     self._log(logging.INFO, "CAPTCHA çözülüyor (Ã…ifre girildi, şimdi Submit edilecek)...")
                      if captcha_solver.solve():
-                         logger.info("Captcha Submit edildi. Sonuç bekleniyor...")
+                         self._log(logging.INFO, "Captcha Submit edildi. Sonuç bekleniyor...")
                          time.sleep(5)
                          if self._check_login_success(log=True):
                              return True
                          else:
-                             logger.warning("Captcha çözüldü ancak giriş başarılı olmadı. Şifre silinmiş olabilir, tekrar denenecek.")
+                             self._log(logging.WARNING, "Captcha çözüldü ancak giriş başarılı olmadı. Ã…ifre silinmiş olabilir, tekrar denenecek.")
                              # Bazen captcha submit sonrası başarısız olursa error message çıkar
                              self._check_login_success(log=False) # Hataları loglamak için
                      else:
-                         logger.error("Captcha çözülemedi, tekrar denenecek.")
+                         self._log(logging.ERROR, "Captcha çözülemedi, tekrar denenecek.")
                 else:
                     # Captcha yoksa ama şifre girildiyse, belki bir Login butonu vardır
                     login_btn = self._find_visible_button(["Login", "Giriş"])
                     if login_btn:
-                        logger.info("CAPTCHA yok, Login butonuna tıklanıyor...")
+                        self._log(logging.INFO, "CAPTCHA yok, Login butonuna tıklanıyor...")
                         self.driver.execute_script("arguments[0].click();", login_btn)
                         time.sleep(4)
                         if self._check_login_success(log=True):
                             return True
                     else:
-                        logger.info("CAPTCHA yok, Login butonu da yok. Sayfanın yüklenmesi bekleniyor...")
+                        self._log(logging.INFO, "CAPTCHA yok, Login butonu da yok. Sayfanın yüklenmesi bekleniyor...")
                         time.sleep(2)
                         if self._check_login_success(log=True): return True
-
             # Döngü bitti ve girilemedi
             return self._check_login_success(log=True)
-
         except Exception as e:
-            logger.error(f"Giriş hatası: {e}")
+            import traceback
+            tb_str = traceback.format_exc()
+            self._log(logging.ERROR, f"Giriş hatası: {e}")
+            self._log(logging.ERROR, f"Traceback:\n{tb_str}")
+            self.is_logged_in = False
             return False
-
     def _check_login_success(self, log: bool = False) -> bool:
         """URL'ye bakarak giriş başarılı mı kontrol et"""
         try:
@@ -464,7 +477,7 @@ class BLSScraper:
             if "login" not in url:
                 self.is_logged_in = True
                 if log:
-                    logger.info(f"✅ Giriş başarılı! URL: {url}")
+                    self._log(logging.INFO, f"✅ Giriş başarılı! URL: {url}")
                 METRIC_LOGIN_ATTEMPTS.labels('success').inc()
                 return True
             if log:
@@ -475,19 +488,18 @@ class BLSScraper:
                         errs = self.driver.find_elements(By.CSS_SELECTOR, sel)
                         for e in errs:
                             if e.text.strip():
-                                logger.error(f"Hata: {e.text.strip()}")
+                                self._log(logging.ERROR, f"Hata: {e.text.strip()}")
                     except Exception:
                         pass
-                logger.error(f"Giriş başarısız — URL: {url}")
+                self._log(logging.ERROR, f"Giriş başarısız Ã¢â‚¬â€ URL: {url}")
                 METRIC_LOGIN_ATTEMPTS.labels('fail').inc()
                 proxy_manager.report_failure(self.proxy) # Report failure on login error
                 report_account_risk(self.user_data.get('id'), 15, reason="Giriş Hatası (Login Fail)")
         except Exception:
             pass
         return False
-
     def _find_password_field(self):
-        """Şifre alanını bul — type='password' veya görünür ikinci input"""
+        """Ã…ifre alanını bul Ã¢â‚¬â€ type='password' veya görünür ikinci input"""
         # Önce type='password' dene
         try:
             pw_fields = self.driver.find_elements(By.CSS_SELECTOR, "input[type='password']")
@@ -496,7 +508,6 @@ class BLSScraper:
                 return pw_fields[0]
         except Exception:
             pass
-
         # Görünür input'ları al
         visible = self._get_visible_text_inputs()
         if len(visible) >= 2:
@@ -504,8 +515,6 @@ class BLSScraper:
         if len(visible) == 1:
             return visible[0]  # Tek input kaldıysa o şifre
         return None
-
-
     def _get_visible_text_inputs(self) -> list:
         """Sayfadaki görünür, doldurulabilir text/password input'larını döner"""
         try:
@@ -525,7 +534,6 @@ class BLSScraper:
             return result
         except Exception:
             return []
-
     def _find_visible_button(self, texts: list):
         """Verilen metinlerden birini içeren görünür butonu bul"""
         try:
@@ -541,8 +549,6 @@ class BLSScraper:
         except Exception:
             pass
         return None
-
-
     def _find_element_multi(self, selectors: list, timeout: int = 10):
         """Birden fazla seçici dener, ilk bulunanı döner"""
         import time as _time
@@ -557,27 +563,23 @@ class BLSScraper:
                     pass
             _time.sleep(0.5)
         return None
-
     def _solve_captcha_with_fallback(self, captcha_solver: "CaptchaSolver"):
         """CAPTCHA çöz, başarısız olursa kullanıcıya 60 sn ver"""
         captcha_ok = captcha_solver.solve()
         if not captcha_ok:
-            logger.warning("CAPTCHA otomatik çözülemedi — lütfen tarayıcıdan manuel çözün (15 sn)")
+            self._log(logging.WARNING, "CAPTCHA otomatik çözülemedi Ã¢â‚¬â€ lütfen tarayıcıdan manuel çözün (15 sn)")
             for _ in range(15):
                 time.sleep(1)
                 if not captcha_solver.is_captcha_present():
-                    logger.info("CAPTCHA manuel olarak çözüldü")
+                    self._log(logging.INFO, "CAPTCHA manuel olarak çözüldü")
                     break
-
-
     def register(self, email: str, password: str, first_name: str, last_name: str,
                  phone: str) -> bool:
         """Yeni hesap oluştur"""
         try:
-            logger.info("Kayıt sayfasına gidiliyor...")
+            self._log(logging.INFO, "Kayıt sayfasına gidiliyor...")
             self.driver.get(self.REGISTER_URL)
             time.sleep(2)
-
             # Form alanlarını doldur
             fields = {
                 "FirstName": first_name,
@@ -587,7 +589,6 @@ class BLSScraper:
                 "Password": password,
                 "ConfirmPassword": password,
             }
-
             for field_id, value in fields.items():
                 try:
                     field = self.wait.until(
@@ -597,8 +598,7 @@ class BLSScraper:
                     field.send_keys(value)
                     time.sleep(0.3)
                 except Exception as e:
-                    logger.warning(f"Alan bulunamadı: {field_id} - {e}")
-
+                    self._log(logging.WARNING, f"Alan bulunamadı: {field_id} - {e}")
             # Kayıt butonu
             try:
                 register_btn = self.driver.find_element(By.ID, "btnRegister")
@@ -609,9 +609,8 @@ class BLSScraper:
                 for btn in btns:
                     if "register" in btn.text.lower() or "kayıt" in btn.text.lower():
                         btn.click()
-                        logger.info("Sisteme Giriş Yap butonu tıklandı.")
+                        self._log(logging.INFO, "Sisteme Giriş Yap butonu tıklandı.")
                         break
-
             # Risk-based Adaptive Delay
             # High risk accounts wait longer to simulate scared/careful human behavior
             risk_score = get_account_risk(self.user_data.get('id'))
@@ -619,26 +618,22 @@ class BLSScraper:
             if risk_score > 30: delay = 4
             if risk_score > 50: delay = 6
             time.sleep(delay)
-
             time.sleep(3)
-
             # Başarı kontrolü
             current_url = self.driver.current_url
             if "register" not in current_url.lower():
-                logger.info("Kayıt başarılı!")
+                self._log(logging.INFO, "Kayıt başarılı!")
                 return True
             else:
                 try:
                     error = self.driver.find_element(By.CLASS_NAME, "validation-summary-errors")
-                    logger.error(f"Kayıt hatası: {error.text}")
+                    self._log(logging.ERROR, f"Kayıt hatası: {error.text}")
                 except NoSuchElementException:
-                    logger.warning("Kayıt durumu belirsiz")
+                    self._log(logging.WARNING, "Kayıt durumu belirsiz")
                 return False
-
         except Exception as e:
-            logger.error(f"Kayıt hatası: {e}")
+            self._log(logging.ERROR, f"Kayıt hatası: {e}")
             return False
-
     def check_appointment_availability(self) -> dict:
         """
         Randevu müsaitliğini kontrol et.
@@ -649,15 +644,13 @@ class BLSScraper:
         }
         """
         result = {'available': False, 'dates': [], 'message': ''}
-
         try:
             if not self.is_logged_in:
                 result['message'] = "Giriş yapılmamış"
                 return result
-
-            logger.info("Randevu sayfasına gidiliyor...")
+            self._log(logging.INFO, "Randevu sayfasına gidiliyor...")
             
-            # ── HTTP Pre-Check: Site Ayakta Mı? ──
+            # Ã¢â€â‚¬Ã¢â€â‚¬ HTTP Pre-Check: Site Ayakta Mı? Ã¢â€â‚¬Ã¢â€â‚¬
             import requests
             try:
                 proxies = None
@@ -667,40 +660,34 @@ class BLSScraper:
                 urllib3.disable_warnings() # Gizler InsecureRequestWarning
                 r = requests.head(self.APPOINTMENT_URL, timeout=10, proxies=proxies, verify=False)
                 if r.status_code >= 500:
-                    logger.warning(f"HTTP Pre-check başarısız (Status {r.status_code}) — site çökmüş olabilir.")
+                    self._log(logging.WARNING, f"HTTP Pre-check başarısız (Status {r.status_code}) Ã¢â‚¬â€ site çökmüş olabilir.")
                     result['message'] = f"Site down (HTTP {r.status_code})"
                     return result
             except requests.exceptions.Timeout:
-                logger.warning(f"HTTP Pre-check başarısız (Timeout). Site Offline.")
+                self._log(logging.WARNING, "HTTP Pre-check başarısız (Timeout). Site Offline.")
                 result['message'] = "Site timeout (HTTP Pre-check)"
                 return result
             except Exception as e:
-                logger.warning(f"HTTP Pre-check Exception: {str(e)[:50]}")
+                self._log(logging.WARNING, f"HTTP Pre-check Exception: {str(e)[:50]}")
                 # Hata durumunda devam et, proxy kaynaklı basit bir ssl hatası olabilir.
-
             self.driver.get(self.APPOINTMENT_URL)
             time.sleep(3)
             self._check_and_solve_captcha()  # Sürpriz CAPTCHA kontrolü
-
             # Risk-based Delay for appointment page
             risk_score = get_account_risk(self.user_data.get('id'))
             time.sleep(3 if risk_score > 40 else 1)
-
             # ... Cloudflare veya "Access Denied" sayfa kontrolü eklenebilir
             if "Access Denied" in self.driver.page_source or "403 Forbidden" in self.driver.title:
-                 logger.error("403 Forbidden Access!")
+                 self._log(logging.ERROR, "403 Forbidden Access!")
                  METRIC_403_ERRORS.inc()
                  report_account_risk(self.user_data.get('id'), 30, reason="403 Forbidden")
                  return {"available": False, "message": "403 BLOCKED", "dates": []}
-
             current_url = self.driver.current_url.lower()
-
             # Login'e yönlendirildik mi?
             if "login" in current_url:
                 self.is_logged_in = False
                 result['message'] = "Oturum sona erdi, yeniden giriş gerekiyor"
                 return result
-
             # Sayfa içinde session expires mesajı var mı?
             try:
                 page_text_lower = self.driver.find_element(By.TAG_NAME, "body").text.lower()
@@ -710,21 +697,20 @@ class BLSScraper:
                     return result
             except Exception:
                 pass
-
-            # ── Email onayı bekleniyor mu? ────────────────────────────────────
+            # Ã¢â€â‚¬Ã¢â€â‚¬ Email onayı bekleniyor mu? Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
             if "dataprotection" in current_url or "emailsent" in current_url:
                 result['message'] = (
                     "⚠️ Email onayı gerekiyor! "
                     "Kayıtlı email adresinize gelen linke tıklayın, "
                     "ardından bot otomatik devam edecek."
                 )
-                logger.warning("Email onayı bekleniyor — lütfen email'inizdeki linke tıklayın!")
+                self._log(logging.WARNING, "Email onayı bekleniyor Ã¢â‚¬â€ lütfen email'inizdeki linke tıklayın!")
                 # Kullanıcı email'i onaylayana kadar bekle (max 5 dk)
                 for _ in range(60):
                     time.sleep(5)
                     url = self.driver.current_url.lower()
                     if "dataprotection" not in url and "emailsent" not in url:
-                        logger.info("Email onaylandı, devam ediliyor...")
+                        self._log(logging.INFO, "Email onaylandı, devam ediliyor...")
                         # Tekrar randevu sayfasına git
                         self.driver.get(self.APPOINTMENT_URL)
                         time.sleep(3)
@@ -733,8 +719,7 @@ class BLSScraper:
                 else:
                     result['message'] = "Email onayı 5 dakika içinde yapılmadı"
                     return result
-
-            # ── Şartlar/Onay sayfası var mı? ─────────────────────────────────
+            # Ã¢â€â‚¬Ã¢â€â‚¬ Ã…artlar/Onay sayfası var mı? Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
             page_text = self.driver.find_element(By.TAG_NAME, "body").text
             if any(kw in page_text.lower() for kw in [
                 "accept", "agree", "terms", "şartlar", "kabul", "consent"
@@ -744,25 +729,23 @@ class BLSScraper:
                     "Accept", "Agree", "Kabul", "I Accept", "Go To Home", "Continue"
                 ])
                 if accept_btn:
-                    logger.info(f"Onay sayfası — '{accept_btn.text.strip()}' tıklanıyor...")
+                    self._log(logging.INFO, f"Onay sayfası Ã¢â‚¬â€ '{accept_btn.text.strip()}' tıklanıyor...")
                     self.driver.execute_script("arguments[0].click();", accept_btn)
                     time.sleep(2)
                     # Tekrar randevu sayfasına git
                     self.driver.get(self.APPOINTMENT_URL)
                     time.sleep(3)
-
-            # ── Randevu sayfası içeriğini logla (debug) ───────────────────────
+            # Ã¢â€â‚¬Ã¢â€â‚¬ Randevu sayfası içeriğini logla (debug) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
             try:
                 page_text = self.driver.find_element(By.TAG_NAME, "body").text
-                logger.info(f"Randevu sayfası URL: {self.driver.current_url}")
-                logger.debug(f"Sayfa içeriği (ilk 500): {page_text[:500]}")
+                self._log(logging.INFO, f"Randevu sayfası URL: {self.driver.current_url}")
+                self._log(logging.DEBUG, f"Sayfa içeriği (ilk 500): {page_text[:500]}")
             except Exception:
                 page_text = ""
-
-            # ── Başvuru profil formu doldurulmamış mı? ────────────────────────
+            # Ã¢â€â‚¬Ã¢â€â‚¬ Başvuru profil formu doldurulmamış mı? Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
             # "You have not filled out and completed the applicant detail form"
             if "have not filled out" in page_text.lower() or "complete the form" in page_text.lower():
-                logger.warning(
+                self._log(logging.WARNING, 
                     "⚠️ Başvuru profil formu eksik! "
                     "'Click Here To Complete Application Form' butonuna tıklanıyor..."
                 )
@@ -774,12 +757,11 @@ class BLSScraper:
                 if complete_btn:
                     self.driver.execute_script("arguments[0].click();", complete_btn)
                     time.sleep(2)
-
-                logger.warning(
-                    "📋 Lütfen tarayıcıda açılan formu doldurun:\n"
-                    "   • Surname At Birth, Place Of Birth\n"
-                    "   • Country Of Birth, Current Nationality\n"
-                    "   • Gender, Marital Status\n"
+                self._log(logging.WARNING, 
+                    "ÄŸÅ¸â€œâ€¹ Lütfen tarayıcıda açılan formu doldurun:\n"
+                    "   Ã¢â‚¬Â¢ Surname At Birth, Place Of Birth\n"
+                    "   Ã¢â‚¬Â¢ Country Of Birth, Current Nationality\n"
+                    "   Ã¢â‚¬Â¢ Gender, Marital Status\n"
                     "   Formu kaydedince bot otomatik devam edecek (max 10 dk bekler)."
                 )
                 # Kullanıcı formu doldurana kadar bekle
@@ -792,7 +774,7 @@ class BLSScraper:
                     if ("have not filled out" not in body_now and
                             "edit member" not in body_now and
                             "personal details" not in body_now):
-                        logger.info("✅ Profil formu tamamlandı, randevu kontrolüne devam ediliyor...")
+                        self._log(logging.INFO, "✅ Profil formu tamamlandı, randevu kontrolüne devam ediliyor...")
                         # Tekrar randevu sayfasına git
                         self.driver.get(self.APPOINTMENT_URL)
                         time.sleep(3)
@@ -800,81 +782,74 @@ class BLSScraper:
                 else:
                     result['message'] = "Profil formu 10 dakika içinde tamamlanmadı"
                     return result
-
-            # ── Randevu formunu doldur ────────────────────────────────────────
+            # Ã¢â€â‚¬Ã¢â€â‚¬ Randevu formunu doldur Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
             categories_to_check = [c.strip() for c in self.user_data.get("category", "").split(",") if c.strip()]
             if not categories_to_check:
-                logger.warning(f"[{self.user_data.get('first_name')}] Kategori girilmemiş.")
+                self._log(logging.WARNING, "Kategori girilmemiş.")
                 result['message'] = "Kategori eksik"
                 return result
-
             all_available_results = []
             
             for index, cat in enumerate(categories_to_check):
-                logger.info(f"--- Kategori Kontrol Ediliyor: {cat} ---")
+                self._log(logging.INFO, f"--- Kategori Kontrol Ediliyor: {cat} ---")
                 
                 if index > 0:
                     # Yeni kategori kontrolü öncesi, normal taramaya benzer bekleme koy
                     delay = int(self.user_data.get("check_interval", 60))
-                    logger.info(f"[{self.user_data.get('first_name')}] Sıradaki kategori ({cat}) için {delay} saniye bekleniyor...")
+                    self._log(logging.INFO, f"Sıradaki kategori ({cat}) için {delay} saniye bekleniyor...")
                     time.sleep(delay)
                     
                     self.driver.get(self.APPOINTMENT_URL)
                     time.sleep(3)
                     self._check_and_solve_captcha()
-
                 form_filled = self._fill_appointment_form(cat)
                 
                 # Bazen Submit ettikten sonra "Pending Appointment" hatası verir
                 if self._handle_pending_appointment():
-                    logger.info(f"  🔄 Pending silindiği için form {cat} için tekrar dolduruluyor...")
+                    self._log(logging.INFO, f"  ÄŸÅ¸â€â€ Pending silindiği için form {cat} için tekrar dolduruluyor...")
                     form_filled = self._fill_appointment_form(cat)
-
                 if not form_filled:
                     if index == 0:
                         result['message'] = "Randevu formu doldurulamadı (Ayarları kontrol edin)"
-                        logger.warning("Randevu formu eksik — ayarlar kontrol edilmeli")
+                        self._log(logging.WARNING, "Randevu formu eksik Ã¢â‚¬â€ ayarlar kontrol edilmeli")
                     continue
-
-                # ── Post-form CAPTCHA kontrolü ──
+                # Ã¢â€â‚¬Ã¢â€â‚¬ Post-form CAPTCHA kontrolü Ã¢â€â‚¬Ã¢â€â‚¬
                 captcha_solved = False
                 try:
-                    logger.info("  Form sonrası CAPTCHA kontrolü yapılıyor...")
+                    self._log(logging.INFO, "  Form sonrası CAPTCHA kontrolü yapılıyor...")
                     captcha_solved = self._check_and_solve_captcha()
                     if captcha_solved:
-                        logger.info("  CAPTCHA çözüldü, takvim yüklenmesi bekleniyor...")
+                        self._log(logging.INFO, "  CAPTCHA çözüldü, takvim yüklenmesi bekleniyor...")
                         time.sleep(2)  # Takvimin yüklenmesi için ekstra bekleme
                 except Exception as ce:
-                    logger.warning(f"Post-submit CAPTCHA hatası: {ce}")
-
+                    self._log(logging.WARNING, f"Post-submit CAPTCHA hatası: {ce}")
                 # Eğer CAPTCHA çıktı ama çözülemediyse, tarih aramayı atla
-                # (Aksi halde CAPTCHA sayfası 'randevu yok' olarak algılanır)
-                from bot.captcha_solver import BLSCaptchaSolver
-                post_solver = BLSCaptchaSolver(self.driver, api_key=self.config.get("2captcha_key", "").strip())
-                if post_solver.is_captcha_present():
-                    logger.warning(f"  ⚠️ CAPTCHA hala ekranda! ({cat}) — tarih araması atlanıyor.")
-                    continue
-
+                # DÜZELTME: is_captcha_present() HTML'de div'i aradığı için çözülmüş AMA gizlenmiş (display: none)
+                # CAPTCHA'ları da "ekranda" sanıp takvimi iptal ediyor. Bu katı kontrolü kaldırıyoruz.
+                # from bot.captcha_solver import CaptchaSolver
+                # post_solver = CaptchaSolver(self.driver, api_key=self.config.get("2captcha_key", "").strip())
+                # if post_solver.is_captcha_present():
+                #     self._log(logging.WARNING, f"  ⚠️ CAPTCHA hala ekranda görünüyor! (DOM gizli olabilir). Tarih aramasına geçiliyor...")
+                
                 # Müsait tarih kontrolü
                 available_dates = self._find_available_dates()
                 if available_dates:
-                    logger.info(f"RANDEVU BULUNDU ({cat}): {available_dates}")
+                    self._log(logging.INFO, f"RANDEVU BULUNDU ({cat}): {available_dates}")
                     for d in available_dates:
                         all_available_results.append({"category": cat, "day": d})
                 else:
-                    logger.info(f"Müsait randevu bulunamadı ({cat})")
-
+                    self._log(logging.INFO, f"Müsait randevu bulunamadı ({cat})")
             if all_available_results:
                 result['available'] = True
                 
                 # En erken tarihe göre sırala
                 all_available_results.sort(key=lambda x: int(x['day']) if str(x['day']).isdigit() else 999)
                 
-                # Sadece loglama ve bildirim iÃ§in gÃ¶rsel tarihleri hazÄ±rla
+                # Sadece loglama ve bildirim için görsel tarihleri hazÃƒâ€Ã‚Â±rla
                 formatted_dates = [f"{r['day']} ({r['category']})" for r in all_available_results]
                 result['dates'] = formatted_dates
                 
-                # Auto book iÃ§in dict listesini de dÃ¶ndÃ¼relim
+                # Auto book için dict listesini de döndürelim
                 result['raw_results'] = all_available_results
                 
                 result['message'] = f"{len(formatted_dates)} müsait tarih bulundu!"
@@ -885,7 +860,6 @@ class BLSScraper:
             else:
                 result['message'] = "Müsait randevu yok"
                 logger.info(f"[{self.user_data.get('first_name')}] Müsait randevu bulunamadı")
-
         except TimeoutException:
             result['message'] = "Sayfa yüklenemedi (timeout)"
             logger.error("Randevu sayfası timeout")
@@ -898,12 +872,23 @@ class BLSScraper:
             result['message'] = f"Beklenmeyen hata: {str(e)[:100]}"
             logger.error(f"Beklenmeyen hata: {e}")
             proxy_manager.report_failure(self.proxy)
-
         # Report success if we reached here without raising an exception and we got a valid response type
         if result['available'] or "yok" in result['message'].lower():
              proxy_manager.report_success(self.proxy)
-
         return result
+
+    def _check_and_solve_captcha(self) -> bool:
+        """
+        CAPTCHA sayfasinda miyiz kontrol et, oyleyse coz.
+        (Turkce karakter bilerek kullanilmamistir, encoding hatalarina karsi koruma amacli)
+        """
+        from bot.captcha_solver import CaptchaSolver
+        solver = CaptchaSolver(self.driver, api_key=self.config.get("2captcha_key", "").strip())
+        if solver.is_captcha_present():
+            self._log(logging.INFO, "CAPTCHA algilandi, cozum baslatiliyor...")
+            return solver.solve()
+        
+        return True
 
     def _fill_appointment_form(self, selected_category=None) -> bool:
         """
@@ -911,7 +896,6 @@ class BLSScraper:
         Dinamik form yapısı nedeniyle Label bazlı seçim yapar.
         """
         from selenium.webdriver.common.keys import Keys
-
         jurisdiction = self.user_data.get("jurisdiction", "").strip()
         location     = self.user_data.get("location", "").strip()
         category     = selected_category or self.user_data.get("category", "").strip()
@@ -919,20 +903,16 @@ class BLSScraper:
         appointment_for = self.user_data.get("appointment_for", "Individual")
         visa_type    = self.user_data.get("visa_type", "").strip()
         visa_sub_type = self.user_data.get("visa_sub_type", "").strip()
-
         if not jurisdiction or not visa_type:
             logger.warning("Randevu formu eksik: jurisdiction veya visa_type girilmemiş.")
             return False
-
         logger.info(f"Randevu formu dolduruluyor (Dinamik Label Yöntemi)")
-
         try:
-            # ── 1. Helper: Select2 Seçimi (Updated Logic) ───────────────────
+            # Ã¢â€â‚¬Ã¢â€â‚¬ 1. Helper: Select2 Seçimi (Updated Logic) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
             def normalize_tr(text):
                 if not text: return ""
                 text = text.replace("İ", "i").replace("I", "ı").lower()
                 return text.strip()
-
             def select2_pick(search_value: str, step_name: str) -> bool:
                 """Açık listeden seçim yapar (Standart + Generic LI Fallback)"""
                 try:
@@ -943,9 +923,7 @@ class BLSScraper:
                         sb.send_keys(search_value)
                         time.sleep(0.3)
                     except: pass
-
                     search_norm = normalize_tr(search_value)
-
                     # A. Standart
                     opts = self.driver.find_elements(By.CSS_SELECTOR, ".select2-results__option:not(.select2-results__option--disabled)")
                     visible = [o for o in opts if o.is_displayed()]
@@ -956,17 +934,16 @@ class BLSScraper:
                         for o in visible:
                             if normalize_tr(o.text) == search_norm:
                                 self.driver.execute_script("arguments[0].click();", o)
-                                logger.info(f"  ✓ {step_name}: {o.text} (Tam)")
+                                logger.info(f"  Ã¢Å“â€œ {step_name}: {o.text} (Tam)")
                                 time.sleep(0.2)
                                 return True
                         # Kısmi
                         for o in visible:
                             if search_norm in normalize_tr(o.text):
                                 self.driver.execute_script("arguments[0].click();", o)
-                                logger.info(f"  ✓ {step_name}: {o.text} (Kısmi)")
+                                logger.info(f"  Ã¢Å“â€œ {step_name}: {o.text} (Kısmi)")
                                 time.sleep(0.2)
                                 return True
-
                     # B. Generic Li Fallback
                     logger.info(f"  [DEBUG] {step_name}: Standart yok, genel LI aranıyor...")
                     all_lis = self.driver.find_elements(By.TAG_NAME, "li")
@@ -974,7 +951,7 @@ class BLSScraper:
                     for li in vis_lis:
                         if search_norm in normalize_tr(li.text):
                             self.driver.execute_script("arguments[0].click();", li)
-                            logger.info(f"  ✓ {step_name}: {li.text} (Fallback)")
+                            logger.info(f"  Ã¢Å“â€œ {step_name}: {li.text} (Fallback)")
                             time.sleep(0.2)
                             return True
                     
@@ -983,8 +960,7 @@ class BLSScraper:
                 except Exception as e:
                     logger.debug(f"  select2_pick error: {e}")
                 return False
-
-            # ── 2. Helper: Label Bazlı Tıklama (Hibrit: DOM + Koordinat) ────────
+            # Ã¢â€â‚¬Ã¢â€â‚¬ 2. Helper: Label Bazlı Tıklama (Hibrit: DOM + Koordinat) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
             def click_container_by_keywords(keywords: list) -> bool:
                 """
                 Verilen keyword'leri içeren Label'ı bul.
@@ -1004,13 +980,11 @@ class BLSScraper:
                     if not target:
                         logger.warning(f"  Label bulunamadı: {keywords}")
                         return False
-
                     l_loc = target.location
                     l_y = l_loc['y']
                     best_container = None
                     logger.info(f"  [DEBUG] Hedef Label: '{target.text}' Y={l_y}")
-
-                    # ── STRATEJI A: Global Koordinat (Genişletilmiş) ──
+                    # Ã¢â€â‚¬Ã¢â€â‚¬ STRATEJI A: Global Koordinat (Genişletilmiş) Ã¢â€â‚¬Ã¢â€â‚¬
                     # Label'a fiziksel olarak en yakın olan kutucuğu seç (Çok daha hızlı ve güvenilir)
                     logger.info("  Koordinat bazlı container araması yapılıyor...")
                         
@@ -1040,7 +1014,6 @@ class BLSScraper:
                             
                             # Log (Commented out again)
                             # logger.info(f"    [ADAY] Tag={tag_name} Class='{cls_name}' Y={c_y} Vis={visible}")
-
                             if not visible: continue
                             
                             # Tolerans: -20px yukarı, +300px aşağı
@@ -1055,8 +1028,7 @@ class BLSScraper:
                         valid_candidates.sort(key=lambda x: x[0])
                         best_container = valid_candidates[0][1]
                         logger.info(f"  Container bulundu (Coord Strategy) - Fark: {valid_candidates[0][0]}px")
-
-                    # ── STRATEJI B: JS Element From Point (Viewport Coord) ──
+                    # Ã¢â€â‚¬Ã¢â€â‚¬ STRATEJI B: JS Element From Point (Viewport Coord) Ã¢â€â‚¬Ã¢â€â‚¬
                     if not best_container:
                         logger.info("  Selector Strategy başarısız, JS elementFromPoint (Viewport) deneniyor...")
                         try:
@@ -1090,11 +1062,9 @@ class BLSScraper:
                                     break
                         except Exception as e:
                             logger.error(f"  JS Probe Error: {e}")
-
                     if not best_container:
                          logger.warning(f"  Container HİÇBİR YÖNTEMLE bulunamadı (Label: {keywords[0]})")
                          return False
-
                     # Tıkla
                     self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", best_container)
                     time.sleep(0.1)
@@ -1105,17 +1075,15 @@ class BLSScraper:
                     
                     time.sleep(0.2)
                     return True
-
                 except Exception as e:
                     logger.debug(f"  click_container error: {e}")
                 return False
-
-            # ── 3. Step-by-Step Filling (with retry on label-not-found) ─────
+            # Ã¢â€â‚¬Ã¢â€â‚¬ 3. Step-by-Step Filling (with retry on label-not-found) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
             
             max_form_retries = 3
             for form_attempt in range(max_form_retries):
                 if form_attempt > 0:
-                    logger.warning(f"  🔄 Form doldurma tekrar deneniyor... (Deneme {form_attempt + 1}/{max_form_retries})")
+                    logger.warning(f"  ÄŸÅ¸â€â€ Form doldurma tekrar deneniyor... (Deneme {form_attempt + 1}/{max_form_retries})")
                     self.driver.get(self.APPOINTMENT_URL)
                     time.sleep(3)
                     self._check_and_solve_captcha()
@@ -1137,14 +1105,12 @@ class BLSScraper:
                     else:
                         logger.warning(f"  ⚠️ {name} seçilemedi, ama opsiyonel, devam ediliyor.")
                     return not mandatory
-
                 # A) Jurisdiction
                 logger.info(f"  → Jurisdiction: {jurisdiction}")
                 if not _try_pick(["Jurisdiction", "İl", "City"], jurisdiction, "Jurisdiction", mandatory=True):
                     if form_attempt < max_form_retries - 1: continue
                     else: return False
                 time.sleep(0.3)
-
                 # B) Appointment For (Radio) - Arayüzde yer değişebilir, tekrar bulalım
                 for radio_attempt in range(4):
                     try:
@@ -1165,9 +1131,8 @@ class BLSScraper:
                                     clicked_radio = True
                                     break
                                 except: pass
-
                         if clicked_radio:
-                            logger.info(f"  ✓ Appointment For: {appointment_for}")
+                            logger.info(f"  Ã¢Å“â€œ Appointment For: {appointment_for}")
                             break
                         else:
                             logger.warning(f"  ⏳ Appointment For bekleniyor... ({radio_attempt+1}/4)")
@@ -1175,7 +1140,6 @@ class BLSScraper:
                     except: 
                         time.sleep(1.5)
                 time.sleep(0.2)
-
                 # C) Location (Opsiyonel / Dinamik)
                 if location:
                     logger.info(f"  → Location: {location}")
@@ -1183,20 +1147,17 @@ class BLSScraper:
                         if form_attempt < max_form_retries - 1: continue
                         else: return False
                     time.sleep(0.3)
-
                 # D) Visa Type
                 logger.info(f"  → Visa Type: {visa_type}")
                 if not _try_pick(["Visa Type", "Vize Türü"], visa_type, "Visa Type", mandatory=True):
                     if form_attempt < max_form_retries - 1: continue
                     else: return False
                 time.sleep(0.3)
-
                 # E) Visa Sub Type (Opsiyonel)
                 if visa_sub_type:
                     logger.info(f"  → Sub Type: {visa_sub_type}")
                     _try_pick(["Sub Type", "Alt Tür"], visa_sub_type, "Sub Type", mandatory=False)
                     time.sleep(0.3)
-
                 # F) Category
                 if category:
                     logger.info(f"  → Category: {category}")
@@ -1204,7 +1165,6 @@ class BLSScraper:
                     time.sleep(0.5)
                     self._handle_premium_popup()
                     time.sleep(0.5)
-
                 # Submit
                 btn = self._find_visible_button(["Submit", "submit", "Ara", "Search"])
                 if btn:
@@ -1213,14 +1173,11 @@ class BLSScraper:
                     time.sleep(3)
                 
                 return True  # Form successfully filled
-
             # All retries exhausted (shouldn't reach here, but safety net)
             return False
-
         except Exception as e:
             logger.error(f"Form hatası: {e}", exc_info=True)
             return False
-
     def _handle_premium_popup(self):
         """Premium kategori seçilince çıkan popup'ı onayla"""
         try:
@@ -1229,9 +1186,7 @@ class BLSScraper:
             page_source = self.driver.page_source.lower()
             if "premium category confirmation" not in page_source and "premium lounge" not in page_source:
                 return 
-
-            logger.info("💎 Premium Popup tespit edildi! Onaylanıyor...")
-
+            logger.info("ÄŸÅ¸â€™ Premium Popup tespit edildi! Onaylanıyor...")
             # 2. Butonu bul (Accept/Onayla) - Genelde yeşil veya 'btn-success'
             # Screenshot'ta "Accept" yeşil buton
             
@@ -1255,587 +1210,1022 @@ class BLSScraper:
                         
                         # Accept veya Lounge içeriyorsa bas
                         if "accept" in txt or "kabul" in txt or "ok" in txt or "yes" in txt:
-                            logger.info(f"💎 Premium Onay butonu tıklandı: {txt}")
+                            logger.info(f"ÄŸÅ¸â€™ Premium Onay butonu tıklandı: {txt}")
                             self.driver.execute_script("arguments[0].click();", btn)
                             time.sleep(1.5)
                             return
                 except: pass
             
-            logger.warning("💎 Premium Popup var ama 'Accept' butonu bulunamadı!")
+            logger.warning("ÄŸÅ¸â€™ Premium Popup var ama 'Accept' butonu bulunamadı!")
             
         except Exception as e:
-            logger.debug(f"Premium popup hatası: {e}")
-
-    def _handle_pending_appointment(self) -> bool:
-        """
-        'Book New Appointment - Appointment Pending' sayfasını tespit edip otomatik temizler.
-        
-        Sayfa 1 — URL: /pendingappointment?err=...
-          → 'DeletePendingAppointment' butonuna tıkla
-        Sayfa 2 — URL: /PendingAppointment  (büyük P)
-          → 'PendingAppointmentRemoved' mesajı görünür  
-          → 'Book New Appointment' butonuna tıkla
-          
-        Returns: True eğer pending randevu silindi ve yeni randevu sayfasına geçildi.
-                 False eğer bu sayfa tespit edilmedi (normal akış devam eder).
-        """
-        try:
-            url = self.driver.current_url.lower()
-            page_text = self.driver.find_element(By.TAG_NAME, "body").text
-            page_lower = page_text.lower()
-
-            # Ekran 1: "Appointment Pending" sayfası
-            if "pendingappointment" in url or "appointment pending" in page_lower or "deletependingappointment" in page_lower:
-                logger.warning("⚠️ Bekleyen randevu tespit edildi! Siliniyor...")
-
-                # 'DeletePendingAppointment' butonunu bul ve tıkla
-                deleted = False
-                delete_texts = [
-                    "DeletePendingAppointment",
-                    "Delete Pending",
-                    "Bekleyen Randevuyu Sil",
-                ]
-                for text in delete_texts:
-                    try:
-                        btns = self.driver.find_elements(By.XPATH,
-                            f"//button[contains(text(), '{text}')] | //a[contains(text(), '{text}')] | //input[@value='{text}']"
-                        )
-                        for btn in btns:
-                            if btn.is_displayed():
-                                self.driver.execute_script("arguments[0].click();", btn)
-                                logger.info(f"  ✅ '{text}' tıklandı.")
-                                deleted = True
-                                time.sleep(2)
-                                break
-                    except Exception:
-                        pass
-                    if deleted:
-                        break
-
-                if not deleted:
-                    # Son çare: sarı/turuncu buton
-                    try:
-                        btns = self.driver.find_elements(By.CSS_SELECTOR,
-                            "a.btn-warning, button.btn-warning, a.btn-danger, button.btn-danger"
-                        )
-                        for btn in btns:
-                            if btn.is_displayed() and "cancel" not in btn.text.lower():
-                                self.driver.execute_script("arguments[0].click();", btn)
-                                logger.info(f"  ✅ Pending silme butonu (CSS fallback) tıklandı: {btn.text}")
-                                deleted = True
-                                time.sleep(2)
-                                break
-                    except Exception:
-                        pass
-
-                if not deleted:
-                    logger.error("  ❌ DeletePendingAppointment butonu bulunamadı!")
-                    return False
-
-                # Ekran 2: "Pending Appointment Removed" onayı geldi mi?
-                time.sleep(1)
-                new_page = self.driver.find_element(By.TAG_NAME, "body").text.lower()
-                if "pendingappointmentremoved" in new_page or "removed" in new_page or "book new appointment" in new_page:
-                    logger.info("  ✅ Bekleyen randevu silindi. 'Book New Appointment' tıklanıyor...")
-                    # "Book New Appointment" butonuna tıkla
-                    btn = self._find_visible_button(["Book New Appointment", "Yeni Randevu"])
-                    if btn:
-                        self.driver.execute_script("arguments[0].click();", btn)
-                        time.sleep(3)
-                        logger.info("  ✅ Yeni randevu sayfasına yönlendirildi.")
-                    return True
-
-            return False  # Bu sayfa değil, normal akış devam etsin
-
-        except Exception as e:
-            logger.debug(f"Pending appointment kontrolü hatası: {e}")
+            logger.error(f"  [DEBUG] Handle Premium Popup Hatası: {e}")
             return False
-
-    # ... (Rest of format methods) ...
-
-    def _select_dropdown_by_text(self, label: str, value: str) -> bool:
+            
+    def _find_available_dates(self) -> list:
         """
-        Select2 veya native select dropdown'ından kısmi metin eşleşmesiyle seçim yapar.
-        3 strateji dener: JS val+trigger, Select2 UI tıklama, native select.
+        Takvim (DatePicker) menüsünde arka plan rengi yeşil olan, 
+        yani müsait olan günlerin numaralarını liste olarak döndürür.
         """
-        from selenium.webdriver.common.keys import Keys
-        label_lower = label.lower().replace(" ", "")
-
-        # ── Strateji 1: JS ile Select2'yi programatik olarak tetikle ──────────
-        # Sayfadaki tüm <select> elementlerini bul, label'a göre eşleştir
+        available_days = []
         try:
-            result = self.driver.execute_script("""
-                var labelLower = arguments[0];
-                var valueLower = arguments[1];
+            self._log(logging.INFO, "Takvimde yeşil (müsait) günler aranıyor...")
+            
+            # Eğer takvim açık değilse açmayı dene
+            calendar = self._find_element_multi([
+                (By.CSS_SELECTOR, "div.k-calendar-container")
+            ], timeout=1)
+            
+            if not calendar or not calendar.is_displayed():
+                self._log(logging.INFO, "  [NATIVE JS] Görünür takvim ikonu aranıyor ve tıklanıyor...")
+                clicked = self.driver.execute_script("""
+                    var checkVis = function(el) {
+                        var rect = el.getBoundingClientRect();
+                        if(rect.width === 0 || rect.height === 0) return false;
+                        var style = window.getComputedStyle(el);
+                        if(style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) return false;
+                        var p = el.parentElement;
+                        while(p && p !== document.body) {
+                            var ps = window.getComputedStyle(p);
+                            if(ps.display === 'none' || ps.visibility === 'hidden' || parseFloat(ps.opacity) === 0) return false;
+                            p = p.parentElement;
+                        }
+                        return true;
+                    };
+                    var icon = Array.from(document.querySelectorAll('span.k-icon.k-i-calendar, .k-datepicker .k-select')).find(checkVis);
+                    if (icon) { icon.click(); return true; }
+                    return false;
+                """)
+                
+                # Bekle ve Takvimin acildigini dogrula
+                try:
+                    from selenium.webdriver.support.ui import WebDriverWait
+                    from selenium.webdriver.support import expected_conditions as EC
+                    WebDriverWait(self.driver, 3).until(
+                        EC.visibility_of_element_located((By.CSS_SELECTOR, "div.k-calendar-container"))
+                    )
+                except:
+                    self._log(logging.WARNING, "Takvim animasyonu uzun sürdü veya takvim UI'ı saptanamadı.")
+                time.sleep(0.5)
+            
+            # 6 Ay boyunca ileri giderek tara (Randevu bulursa durur)
+            for month_offset in range(6):
+                # Mevcut ayın adını al
+                month_title = ""
+                try:
+                    title_el = self.driver.find_element(By.CSS_SELECTOR, ".k-nav-fast")
+                    if title_el.is_displayed():
+                        month_title = title_el.text.strip()
+                except: pass
 
-                // Tüm select elementlerini tara
-                var selects = document.querySelectorAll('select');
-                for (var sel of selects) {
-                    // Select'in ID/name/placeholder'ı label ile eşleşiyor mu?
-                    var selId = (sel.id || '').toLowerCase().replace(/[^a-z]/g,'');
-                    var selName = (sel.name || '').toLowerCase().replace(/[^a-z]/g,'');
+                if month_title:
+                    self._log(logging.INFO, f"  Taranan Ay: {month_title}")
+                else:
+                    self._log(logging.INFO, f"  Taranan Ay: Mevcut + {month_offset}")
 
-                    // Yakın label elementini bul
-                    var labelText = '';
-                    var parent = sel.closest('.form-group, .col-md-4, .col-md-6, div');
-                    if (parent) {
-                        var lbl = parent.querySelector('label, .control-label');
-                        if (lbl) labelText = lbl.innerText.toLowerCase().replace(/[^a-z]/g,'');
+                # JS Honeypot Bypass: Gorunur yesil hucreleri topla
+                js_find_green_dates = """
+                return (function() {
+                    function isVisible(el) {
+                        var rect = el.getBoundingClientRect();
+                        if (rect.width === 0 || rect.height === 0) return false;
+                        if (rect.right < 0 || rect.bottom < 0 ||
+                            rect.left > (window.innerWidth || document.documentElement.clientWidth) ||
+                            rect.top > (window.innerHeight || document.documentElement.clientHeight)) return false;
+                        var curr = el;
+                        while (curr) {
+                            var style = window.getComputedStyle(curr);
+                            if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) return false;
+                            curr = curr.parentElement;
+                        }
+                        return true;
                     }
-
-                    var matches = selId.includes(labelLower) ||
-                                  selName.includes(labelLower) ||
-                                  labelText.includes(labelLower);
-
-                    if (!matches) continue;
-
-                    // Seçenekleri tara
-                    for (var opt of sel.options) {
-                        if (opt.text.toLowerCase().includes(valueLower)) {
-                            // Select2 varsa jQuery ile tetikle
-                            sel.value = opt.value;
-                            if (window.jQuery && window.jQuery(sel).data('select2')) {
-                                window.jQuery(sel).val(opt.value).trigger('change');
-                                return 'select2:' + opt.text;
-                            } else {
-                                // Native change event
-                                sel.dispatchEvent(new Event('change', {bubbles: true}));
-                                return 'native:' + opt.text;
+                    var green_days = [];
+                    var cells = document.querySelectorAll("td[role='gridcell']:not(.k-other-month):not(.k-state-disabled) .k-link");
+                    for (var i = 0; i < cells.length; i++) {
+                        var link = cells[i];
+                        if (isVisible(link)) {
+                            var bg = window.getComputedStyle(link).backgroundColor;
+                            var rgba = bg.match(/[0-9]+/g);
+                            if (rgba && rgba.length >= 3) {
+                                var r = parseInt(rgba[0]), g = parseInt(rgba[1]), b = parseInt(rgba[2]);
+                                if (g > 100 && g > r * 2) {
+                                    green_days.push(link.textContent.trim());
+                                }
                             }
                         }
                     }
-                }
-                return null;
-            """, label_lower, value.lower())
-
-            if result:
-                logger.info(f"  {label}: '{result}' seçildi (JS)")
+                    return green_days;
+                })();
+                """
+                green_days = self.driver.execute_script(js_find_green_dates)
                 
-                # Check popup if Category was selected via JS
-                if "category" in label_lower:
-                    time.sleep(1.0)
-                    self._handle_premium_popup()
-
-                time.sleep(1)
-                return True
-        except Exception as e:
-            logger.debug(f"JS Select2 hatası ({label}): {e}")
-
-        # ── Strateji 2: Select2 UI — span container'a tıkla, ara, seç ────────
-        try:
-            # Select2 container'larını bul
-            containers = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                "span.select2-container, .select2-selection"
-            )
-            for container in containers:
-                try:
-                    # Container'ın yakınındaki label'ı kontrol et
-                    parent = container.find_element(By.XPATH, "./ancestor::*[contains(@class,'form-group') or contains(@class,'col-')][1]")
-                    lbl_el = parent.find_element(By.CSS_SELECTOR, "label, .control-label")
-                    lbl_text = lbl_el.text.lower().replace(" ", "")
-                    if label_lower not in lbl_text:
-                        continue
-                except Exception:
-                    # Label bulunamazsa container text'e bak
-                    if label.lower() not in container.text.lower():
-                        continue
-
-                # Container'a tıkla
-                self.driver.execute_script("arguments[0].click();", container)
-                time.sleep(0.8)
-
-                # Arama kutusu
-                try:
-                    search = self.driver.find_element(By.CSS_SELECTOR, ".select2-search__field")
-                    search.clear()
-                    search.send_keys(value)
-                    time.sleep(1.2)
-
-                    # Sonuçları tara
-                    options = self.driver.find_elements(
-                        By.CSS_SELECTOR, ".select2-results__option:not(.select2-results__option--disabled)"
-                    )
-                    for opt in options:
-                        if value.lower() in opt.text.lower() and opt.is_displayed():
-                            opt.click()
-                            logger.info(f"  {label}: '{opt.text}' seçildi (Select2 UI)")
-                            
-                            # Check popup if Category was selected via UI
-                            if "category" in label_lower:
-                                time.sleep(1.0)
-                                self._handle_premium_popup()
-
-                            time.sleep(0.5)
-                            return True
-
-                    # Sonuç bulunamadı, kapat
-                    search.send_keys(Keys.ESCAPE)
-                except Exception:
-                    pass
-        except Exception as e:
-            logger.debug(f"Select2 UI hatası ({label}): {e}")
-
-        # ── Strateji 3: Native select — tüm select'leri dene ─────────────────
-        try:
-            selects = self.driver.find_elements(By.TAG_NAME, "select")
-            for sel_el in selects:
-                if not sel_el.is_displayed():
-                    continue
-                sel_id = (sel_el.get_attribute("id") or "").lower()
-                sel_name = (sel_el.get_attribute("name") or "").lower()
-                if label_lower not in sel_id and label_lower not in sel_name:
-                    continue
-                sel = Select(sel_el)
-                for opt in sel.options:
-                    if value.lower() in opt.text.lower():
-                        sel.select_by_visible_text(opt.text)
-                        logger.info(f"  {label}: '{opt.text}' seçildi (native fallback)")
-                        
-                        # Check popup if Category was selected via Native
-                        if "category" in label_lower:
-                            time.sleep(1.0)
-                            self._handle_premium_popup()
-                        
-                        return True
-        except Exception as e:
-            logger.debug(f"Native select hatası ({label}): {e}")
-
-        logger.error(f"  {label}: '{value}' seçilemedi — tüm stratejiler başarısız")
-        return False
-
-    def _check_and_solve_captcha(self) -> bool:
-        """
-        Sayfada CAPTCHA var mı kontrol et, varsa çöz.
-        Her sayfa yüklemesinden sonra çağrılabilir.
-        Returns: True if CAPTCHA was found and solved, False otherwise.
-        """
-        try:
-            from bot.captcha_solver import CaptchaSolver, BLSCaptchaSolver
-            api_key = self.config.get("2captcha_key", "").strip()
-            
-            if not api_key:
-                return False  # Cannot solve captcha without an API key
-
-            solver = BLSCaptchaSolver(self.driver, api_key=api_key)
-            
-            if not solver.is_captcha_present():
-                return False  # No CAPTCHA on page
-            
-            # CAPTCHA detected — now log and solve
-            logger.info("🔐 CAPTCHA tespit edildi, 2Captcha ile çözülüyor...")
-            METRIC_CAPTCHAS_ENCOUNTERED.inc()
-            report_account_risk(self.user_data.get('id'), 5, reason="Captcha Çıktı")
-
-            success = solver.solve()
-            
-            # VERİFICATION: Çözüm sonrası Captcha hala orada mı?
-            time.sleep(2)
-            if solver.is_captcha_present():
-                 logger.warning("⚠️ Captcha çözüldü dendi ama HALA VAR! (Yanlış çözüm?)")
-                 logger.info("   Tekrar deneniyor (Retry)...")
-                 time.sleep(2)
-                 success_retry = solver.solve()
-                 if success_retry:
-                     logger.info("   ✅ İkinci denemede çözüldü.")
-                 else:
-                     logger.error("   ❌ İkinci deneme de başarısız.")
-                     return False
-            else:
-                if success:
-                    logger.info("✅ CAPTCHA başarıyla geçildi (Artık ekranda yok).")
-                else:
-                     # Çözülemedi ama ekranda da yok? Belki de geçildi?
-                     logger.warning("Captcha çözülemedi döndü ama ekranda bulunamadı. Devam ediliyor.")
-            
-            # Post-solve bekleme: sayfa yenilensin / takvim yüklensin
-            time.sleep(3)
-            return True
-        except Exception as e:
-            logger.debug(f"CAPTCHA kontrol hatası: {e}")
-            return False
-
-    def _find_available_dates(self) -> list:
-        """
-        Sayfadaki MÜSAİT (yeşil) tarihleri bul.
-        Ekranda: Yeşil = Appointment Available, Kırmızı = No Slot Available
-        Sadece yeşil hücreleri döndürür.
-        """
-        available = []
-        min_days = int(self.config.get("minimum_days", 0))
-
-        def _is_valid_date(day_text):
-            if min_days <= 0:
-                return True
-            try:
-                from datetime import datetime
-                day = int(day_text)
-                today = datetime.now()
-                if day < today.day:
-                    target_month = today.month + 1 if today.month < 12 else 1
-                    target_year = today.year if today.month < 12 else today.year + 1
-                else:
-                    target_month = today.month
-                    target_year = today.year
-                target_date = datetime(target_year, target_month, day)
-                delta = (target_date.date() - today.date()).days
-                return delta >= min_days
-            except Exception:
-                return True
-
-        # ── Yöntem 1: 'available' class'ına sahip takvim hücreleri ──────────
-        # Sitenin kullandığı CSS class'larını öncelik sırasıyla dene
-        available_selectors = [
-            "td.day.available:not(.disabled):not(.old):not(.new)",  # Bootstrap datepicker'ın standart class'ı
-            "td.day.green:not(.disabled)",                          # Özel green class
-            "td[class*='available']:not([class*='no-slot'])",       # 'available' içeren genel
-        ]
-
-        for selector in available_selectors:
-            try:
-                cells = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                if cells:
-                    for cell in cells:
-                        text = cell.text.strip()
-                        if text and text.isdigit():
-                            if _is_valid_date(text):
-                                available.append(text)
+                if green_days:
+                    for day_text in green_days:
+                        if day_text.isdigit():
+                            if month_title:
+                                full_date = f"{day_text} ({month_title})"
                             else:
-                                logger.info(f"  {text}. gün müsait ama {min_days} günden yakın, es geçiliyor.")
-                    if available:
-                        logger.info(f"  Müsait tarihler ({selector}): {available}")
-                        return available
-            except Exception:
-                pass
+                                full_date = day_text
+                            available_days.append(full_date)
+                
+                # Eğer bu ayda randevu bulduysak, sonrakilere bakmaya gerek yok.
+                if available_days:
+                    break
+                
+                # Sonraki aya gec
+                if month_offset < 5:
+                    # Honeypot bypass: Sadece gercekten boyutlari olan tusa bas
+                    next_clicked = self.driver.execute_script("""
+                        var checkVis = function(el) {
+                            var rect = el.getBoundingClientRect();
+                            if(rect.width === 0 || rect.height === 0) return false;
+                            var style = window.getComputedStyle(el);
+                            if(style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) return false;
+                            var p = el.parentElement;
+                            while(p && p !== document.body) {
+                                var ps = window.getComputedStyle(p);
+                                if(ps.display === 'none' || ps.visibility === 'hidden' || parseFloat(ps.opacity) === 0) return false;
+                                p = p.parentElement;
+                            }
+                            return true;
+                        };
+                        var vis = Array.from(document.querySelectorAll('.k-nav-next, .k-calendar .k-header .k-next-view')).find(checkVis);
+                        if(vis) { vis.click(); return true; }
+                        return false;
+                    """)
+                    if next_clicked:
+                        self._log(logging.INFO, "  Sonraki aya geçiliyor...")
+                        time.sleep(1.0) # Ajax animasyonunu bekle
+                    else:
+                        self._log(logging.DEBUG, "Sonraki ay butonu bulunamadı (veya max limit)")
+                        break # Buton yoksa donguden cik
 
-        # ── Yöntem 2: JS ile arka plan rengini kontrol et ───────────────────
-        # Yeşil = rgb(40, 167, 69) veya benzeri #28a745, #20c997 vs.
-        # Kırmızı = rgb(220, 53, 69) = #dc3545
-        try:
-            all_cells = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                "td.day:not(.disabled):not(.old):not(.new)"
-            )
-            for cell in all_cells:
-                text = cell.text.strip()
-                if not text or not text.isdigit():
-                    continue
-                try:
-                    bg = self.driver.execute_script(
-                        "return window.getComputedStyle(arguments[0]).backgroundColor;",
-                        cell
-                    )
-                    # Yeşil tonları: rgb(40, ...) veya rgb değerinde green > red
-                    if bg:
-                        parts = [int(x) for x in bg.replace("rgba(","").replace("rgb(","").replace(")","").split(",")[:3]]
-                        r, g, b = parts[0], parts[1], parts[2]
-                        # Yeşil: g dominant (g > 100 ve g > r)
-                        is_green = g > 100 and g > r
-                        if is_green and _is_valid_date(text):
-                            available.append(text)
-                except Exception:
-                    pass
-            if available:
-                logger.info(f"  Müsait tarihler (JS renk analizi): {available}")
-                return available
-        except Exception:
-            pass
+            if available_days:
+                self._log(logging.INFO, f"Bulunan müsait günler: {available_days}")
+                
+        except Exception as e:
+            self._log(logging.ERROR, f"Takvim okuma hatası: {e}")
+            
+        # Eğer formatlı stringler varsa set() sort() desteklemez, normal dondur
+        return list(set(available_days))
 
-        # ── Yöntem 3: Dropdown tarih listesi (eğer takvim değil select ise) ─
-        try:
-            date_select = self.driver.find_element(By.ID, "AppointmentDate")
-            options = Select(date_select).options
-            for opt in options[1:]:
-                if opt.get_attribute("value"):
-                    available.append(opt.text.strip())
-            if available:
-                return available
-        except Exception:
-            pass
-
-        logger.info("  Müsait tarih bulunamadı.")
-        return []
-
-    def _find_available_slots(self) -> list:
+    def _handle_pending_appointment(self) -> bool:
         """
-        Appointment Slot dropdown'ından sadece yeşil (Slot Available) seçenekleri döndürür.
-        Kırmızı (Slot Booked) olanları atlar.
+        Pending Appointment ekranı gelirse (Adayın zaten bekleyen randevusu var),
+        'Book New Appointment'ı seçip devam eder.
         """
-        available_slots = []
         try:
-            # Önce native select elementini dene
-            slot_select = self.driver.find_element(By.ID, "TimeSlot")
-            options = Select(slot_select).options
-            for opt in options[1:]:
-                val = opt.get_attribute("value")
-                if not val:
-                    continue
-                # JS ile arka plan rengini kontrol et
-                try:
-                    bg = self.driver.execute_script(
-                        "return window.getComputedStyle(arguments[0]).backgroundColor;",
-                        opt
-                    )
-                    if bg:
-                        parts = [int(x) for x in bg.replace("rgba(","").replace("rgb(","").replace(")","").split(",")[:3]]
-                        r, g, b = parts[0], parts[1], parts[2]
-                        is_red = r > 150 and r > g * 1.5   # Kırmızı = dolu slot
-                        if is_red:
-                            logger.debug(f"  Slot dolu (kırmızı): {opt.text}")
-                            continue
-                except Exception:
-                    pass  # Renk okunamazsa yine ekle (güvenli taraf)
-                available_slots.append({"value": val, "text": opt.text.strip()})
-
-        except Exception:
-            # Alternatif: CSS class bazlı slot li elementleri (custom dropdown ise)
+            logger.info("  [DEBUG] Bekleyen randevu (Pending Appointment) kontrol ediliyor...")
+            
+            # 1. Adım: 'Book New Appointment' radio butonunu bul ve tıkla
+            # ID'si değişebilir diye label/value/text hepsi üzerinden şansımızı deniyoruz.
             try:
-                slot_items = self.driver.find_elements(
-                    By.CSS_SELECTOR,
-                    "ul.slot-list li.available, li.slot-available, .slot-item:not(.booked)"
-                )
-                for item in slot_items:
-                    val = item.get_attribute("data-value") or item.text.strip()
-                    if val:
-                        available_slots.append({"value": val, "text": item.text.strip()})
-            except Exception:
-                pass
-
-        return available_slots
-
-    def book_appointment(self, target_slot=None) -> bool:
-        """
-        Randevu al (ilk müsait tarihe veya verilen hedefe).
-        Returns: True if successful
-        """
-        try:
-            target_date = None
-            target_category = None
-            if isinstance(target_slot, dict):
-                target_date = target_slot.get("day")
-                target_category = target_slot.get("category")
-            else:
-                target_date = target_slot
-
-            logger.info(f"Randevu alınıyor: {target_date or 'ilk müsait'} (Kategori: {target_category or 'MEVCUT'})")
-
-            # Eğer özel bir kategori seçildiyse (çoklu kategori taramasından geliyorsa), formu tazeleyip seçelim
-            if target_category:
-                logger.info(f"Hedef kategori ({target_category}) için form yeniden dolduruluyor...")
-                self.driver.get(self.APPOINTMENT_URL)
-                time.sleep(3)
-                self._check_and_solve_captcha()
-                form_filled = self._fill_appointment_form(target_category)
-                
-                # Bazen Submit ettikten sonra "Pending Appointment" hatası verir
-                if self._handle_pending_appointment():
-                    logger.info("  🔄 Pending silindiği için rezervasyon formu tekrar dolduruluyor...")
-                    form_filled = self._fill_appointment_form(target_category)
-
-                if not form_filled:
-                    logger.error("Rezervasyon için form doldurulamadı!")
-                    return False
-                time.sleep(2)
-                self._check_and_solve_captcha()
-
-            # ── Tarih seçimi ─────────────────────────────────────────────────
-            if target_date:
-                date_clicked = False
-                # Önce sadece yeşil (müsait) hücreler arasında ara
-                for selector in [
-                    "td.day.available:not(.disabled):not(.old):not(.new)",
-                    "td.day:not(.disabled):not(.old):not(.new)",
-                ]:
-                    try:
-                        cells = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                        for cell in cells:
-                            if cell.text.strip() == str(target_date):
-                                self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", cell)
-                                time.sleep(0.2)
-                                self.driver.execute_script("arguments[0].click();", cell)
-                                logger.info(f"  ✅ Tarih seçildi: {target_date}")
-                                date_clicked = True
-                                time.sleep(1.5)  # Slot dropdown'ın yüklenmesi için bekle
-                                break
-                    except Exception:
-                        pass
-                    if date_clicked:
-                        break
-
-                if not date_clicked:
-                    logger.warning(f"  ⚠️ {target_date}. gün takvimde bulunamadı!")
-
-            # ── Zaman slotu seç (sadece yeşil/müsait olanlar) ───────────────
-            slot_selected = False
-            try:
-                # Slot dropdown'ının belirmesini bekle
-                self.wait.until(EC.presence_of_element_located((By.ID, "TimeSlot")))
-                time.sleep(0.5)
-                
-                # Renk bazlı filtreleme: sadece yeşil slotları getir
-                available_slots = self._find_available_slots()
-                
-                if available_slots:
-                    logger.info(f"  Müsait slotlar: {[s['text'] for s in available_slots]}")
-                    first_slot = available_slots[0]
-                    time_select = self.driver.find_element(By.ID, "TimeSlot")
-                    Select(time_select).select_by_value(first_slot["value"])
-                    logger.info(f"  ✅ Slot seçildi: {first_slot['text']}")
-                    slot_selected = True
-                    time.sleep(1)
-                else:
-                    # Fallback: ilk değerli seçenek (güvenli taraf)
-                    logger.warning("  Renk bazlı slot bulunamadı, ilk değerli seçeneğe düşülüyor...")
-                    time_select = self.driver.find_element(By.ID, "TimeSlot")
-                    for opt in Select(time_select).options[1:]:
-                        if opt.get_attribute("value"):
-                            Select(time_select).select_by_value(opt.get_attribute("value"))
-                            logger.info(f"  Slot (fallback): {opt.text}")
-                            slot_selected = True
-                            break
+                # Standart id genelde 'rbNewAppointment'
+                rb_new = self._find_element_multi([
+                    (By.ID, "rbNewAppointment"),
+                    (By.CSS_SELECTOR, "input[type='radio'][value='NewAppointment']"),
+                    (By.XPATH, "//input[@type='radio' and contains(following-sibling::text(), 'Book New Appointment')]")
+                ], timeout=3)
+                if rb_new:
+                    self.driver.execute_script("arguments[0].click();", rb_new)
+                    logger.info("  'Book New Appointment' seçeneği işaretlendi.")
                     time.sleep(1)
             except Exception as e:
-                logger.warning(f"  Zaman slotu seçilemedi: {e}")
+                logger.warning(f"  [DEBUG] 'Book New Appointment' radio butonu bulunamadı veya tıklanamadı: {e}")
+                pass # Belki tek seçenektir veya direk submit edilebilir
 
-            if not slot_selected:
-                logger.error("  Hiçbir müsait slot seçilemedi!")
-                return False
-
-            # ── Submit ───────────────────────────────────────────────────────
+            # 2. Adım: Submit/Proceed butonuna tıkla
             try:
-                confirm_btn = self.wait.until(
-                    EC.element_to_be_clickable((By.ID, "btnSubmit"))
-                )
-                self.driver.execute_script("arguments[0].click();", confirm_btn)
-                time.sleep(3)
-            except Exception:
-                # Alternatif buton
-                btns = self.driver.find_elements(By.TAG_NAME, "button")
-                for btn in btns:
-                    btn_text = btn.text.lower()
-                    if any(kw in btn_text for kw in ["submit", "confirm", "onayla", "devam"]):
-                        self.driver.execute_script("arguments[0].click();", btn)
-                        time.sleep(3)
-                        break
-
-            # ── Başarı kontrolü ──────────────────────────────────────────────
-            page_text = self.driver.find_element(By.TAG_NAME, "body").text.lower()
-            success_keywords = ["success", "confirmed", "başarı", "onaylandı", "appointment booked"]
-            if any(kw in page_text for kw in success_keywords):
-                logger.info("🎉 Randevu başarıyla alındı!")
-                return True
-            else:
-                logger.warning("Randevu alındı mı belirsiz, sayfa kontrol edilmeli")
-                return True  # Kullanıcı tarayıcıdan görebilir
-
-        except Exception as e:
-            logger.error(f"Randevu alma hatası: {e}")
+                # Standart id 'btnSubmit'
+                btn_submit = self._find_element_multi([
+                    (By.ID, "btnSubmit"),
+                    (By.CSS_SELECTOR, "input[type='submit'][value='Submit']"),
+                    (By.XPATH, "//input[@type='submit' and contains(@value, 'Submit')]")
+                ], timeout=3)
+                
+                if btn_submit:
+                    # Kendo UI bazen normal click'i engeller, JS ile tıkla:
+                    self.driver.execute_script("arguments[0].click();", btn_submit)
+                    logger.info("  Pending Appointment sayfasında Submit'e basıldı.")
+                    time.sleep(3) # Yönlendirme için bekle
+                    return True
+                else:
+                    logger.warning("  [DEBUG] Pending Appointment sayfasında Submit butonu bulunamadı.")
+            except Exception as e:
+                logger.warning(f"  [DEBUG] Pending Appointment Submit hatası: {e}")
+                
             return False
 
-    def is_driver_alive(self) -> bool:
-        """WebDriver hâlâ çalışıyor mu?"""
+        except Exception as e:
+            logger.error(f"Bekleyen randevu işleme (Pending Appointment) genel hatası: {e}")
+            return False
+
+    def book_appointment(self, target_slot: dict = None, appointment_details: dict = None) -> bool:
+        """Kritik Randevu Alma Ana Fonksiyonu (Düzeltildi)"""
         try:
-            _ = self.driver.current_url
-            return True
-        except Exception:
+            # Geriye dönük uyumluluk için hem target_slot hem appointment_details kabul ediliyor
+            details = target_slot or appointment_details or {}
+            category_id = details.get("category_id") or self.user_data.get("category", "")
+            category_name = details.get("category_name") or details.get("category", "Bilinmeyen Kategori")
+            target_date = details.get("date") or details.get("day")  # "DD/MM/YYYY" veya "6 (May 2026)"
+            
+            day_num = ""
+            if target_date:
+                t_str = str(target_date).strip()
+                if '/' in t_str:
+                    day_num = t_str.split('/')[0]
+                elif ' ' in t_str: 
+                    day_num = t_str.split(' ')[0] # "6" from "6 (May 2026)"
+                elif hasattr(target_date, 'day'):
+                    day_num = str(target_date.day)
+                else:
+                    day_num = t_str # Sadece numara geldiyse (örn: '4')
+
+            # '05' formatındaysa '5' yapmak için
+            day_num = day_num.lstrip('0')
+            
+            self._log(logging.INFO, f"🚀 Kategori [{category_name}] - Tarih [{target_date}] için form dolduruluyor...")
+
+            current_url = self.driver.current_url.lower()
+            if "apptsloti" not in current_url and "slotselection" not in current_url:
+                appointment_url = f"https://turkey.blsspainglobal.com/Global/bls/apptsloti/{category_id}"
+                self.driver.get(appointment_url)
+                time.sleep(2)
+            else:
+                self._log(logging.INFO, "  Zaten slot seçim sayfasındayız, URL reload atlanıyor.")
+                
+            current_url = self.driver.current_url
+
+            
+            # --- 1) Pending Appointment Kontrolü ---
+            if "PendingAppointment" in current_url:
+                self._log(logging.WARNING, "⚠️ Pending Appointment (Bekleyen Randevu) ekranıyla karşılaşıldı!")
+                handle_success = self._handle_pending_appointment()
+                if not handle_success:
+                    self._log(logging.ERROR, "❌ Bekleyen randevu ekranı aşılamadı.")
+                    return False
+                
+                # Başarılı geçildiyse sayfa değişmiştir, current_url'yi güncelle
+                current_url = self.driver.current_url
+
+            # --- 2) Zaten Applicant Selection Sayfasındaysa ---
+            if "ApplicantSelection" in current_url:
+                self._log(logging.INFO, "  Doğrudan Applicant Selection sayfasındayız. Takvim adımı atlanıyor.")
+                date_clicked = True
+                slot_selected = True
+                
+            else:
+                # --- 3) Normal Takvim/Slot Seçimi ---
+                self._log(logging.INFO, "  Takvim/Slot seçimi adımındayız...")
+            
+                target_month = ""
+                if "/" in str(target_date):
+                    parts = str(target_date).split('/')
+                    if len(parts) >= 2:
+                        mt = int(parts[1])
+                        month_names = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+                        if 1 <= mt <= 12:
+                            target_month = month_names[mt]
+                if "(" in str(target_date):
+                    target_month = str(target_date).split("(")[1].replace(")", "").strip()
+                
+                self._log(logging.INFO, f"  Kendo takvimde gun seciliyor: day_num='{day_num}' | target_date='{target_date}' | target_month='{target_month or 'BOŞ - navigasyon YOK'}'")
+                
+                # --- [DETERMINISTIC CALENDAR INTERACTION - Tüm hatalar çözüldü] ---
+                # ROOT CAUSE FIX #1: Regex'i /[0-9]+/g kullan. Python triple-string'de \d
+                #   Python->JS escape'den geçince /\\d+/g olur (literal backslash+d, rakam değil)!
+                #   Bu yüzden rgba her zaman null, yeşil renk hiç tespit edilemiyordu.
+                # ROOT CAUSE FIX #2: Viewport sınırı kontrolü (left:-9999px honeypot'u yakalar)
+                # ROOT CAUSE FIX #3: Tek atomik JS fonksiyon (Python<->JS round-trip race yok)
+                # ROOT CAUSE FIX #4: $(link).trigger('click') - Kendo'nun kendi event handler'ı
+                try:
+                    # ─── ADIM 1: TAKVİMİ AÇ ───────────────────────────────────────────
+                    self._log(logging.INFO, "  [CAL] Adim 1/3: Takvim ikonu tiklaniyor...")
+                    
+                    # Takvim zaten açık mı kontrol et
+                    cal_open = self.driver.execute_script("""
+                        var cal = document.querySelector('div.k-calendar-container, div.k-animation-container');
+                        return cal && window.getComputedStyle(cal).display !== 'none';
+                    """)
+                    
+                    if not cal_open:
+                        # Görünür takvim ikonunu bul ve tıkla
+                        # Takvimin gerçekten acildigini garanti altina almak icin retry mekanizmasi
+                        cal_opened_successfully = False
+                        for cal_try in range(3):
+                            opened = self.driver.execute_script("""
+                                function isReal(el) {
+                                    if (!el) return false;
+                                    var r = el.getBoundingClientRect();
+                                    if (r.width <= 0 || r.height <= 0) return false;
+                                    if (r.right < -50) return false;
+                                    var c = el;
+                                    while (c) {
+                                        var s = window.getComputedStyle(c);
+                                        if (s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)===0) return false;
+                                        c = c.parentElement;
+                                    }
+                                    return true;
+                                }
+                                
+                                // 1) Takvim zaten acik mi?
+                                var openCals = Array.from(document.querySelectorAll('.k-animation-container .k-calendar-container, .k-calendar-container.k-state-border-down'))
+                                    .filter(isReal);
+                                if (openCals.length > 0) return 'ALREADY_OPEN';
+                                
+                                // 2) Acik degilse butonu bul ve tikla
+                                var icon = Array.from(document.querySelectorAll(
+                                    'span.k-icon.k-i-calendar, .k-datepicker .k-select, .k-picker-wrap .k-select'
+                                )).find(isReal);
+                                
+                                if (icon) {
+                                    icon.scrollIntoView({block: 'center', behavior: 'instant'});
+                                    if (typeof $ !== 'undefined') { $(icon).trigger('click'); }
+                                    else { icon.click(); }
+                                    return 'CLICKED_ICON';
+                                }
+                                
+                                // Fallback: input'a tikla
+                                var input = Array.from(document.querySelectorAll('input[data-role="datepicker"]')).find(isReal);
+                                if (input) {
+                                    input.scrollIntoView({block: 'center', behavior: 'instant'});
+                                    if (typeof $ !== 'undefined') { $(input).trigger('click'); }
+                                    else { input.click(); }
+                                    return 'CLICKED_INPUT';
+                                }
+                                
+                                return 'NOT_FOUND';
+                            """)
+                            
+                            if opened == 'NOT_FOUND':
+                                self._log(logging.ERROR, "  [CAL] Takvim ikonu veya input'u bulunamadi!")
+                                break
+                            
+                            if opened == 'ALREADY_OPEN':
+                                cal_opened_successfully = True
+                                break
+                            
+                            # Tikladik, simdi gercekten acilmasini bekle
+                            try:
+                                WebDriverWait(self.driver, 3).until(
+                                    lambda d: d.execute_script("""
+                                        var cals = document.querySelectorAll('.k-animation-container .k-calendar-container, .k-calendar-container.k-state-border-down');
+                                        for(var i=0; i<cals.length; i++){
+                                            var style = window.getComputedStyle(cals[i].parentElement || cals[i]);
+                                            if (style.display !== 'none' && parseFloat(style.opacity) > 0) return true;
+                                        }
+                                        return false;
+                                    """)
+                                )
+                                cal_opened_successfully = True
+                                break # Basariyla acildi
+                            except Exception:
+                                self._log(logging.WARNING, f"  [CAL] Takvim acilisi gozlemlenemedi (deneme {cal_try+1}/3), tekrar tiklaniyor...")
+                                time.sleep(0.5)
+                        
+                        if not cal_opened_successfully:
+                           self._log(logging.ERROR, "  [CAL] Takvim pop-up'i acilamadi, islem iptal.")
+                           return False
+                        
+                        # Takvimi viewport'a getir (sayfa altında açılmış olabilir!)
+                        self.driver.execute_script("""
+                            var cal = document.querySelector('.k-animation-container .k-calendar-container, .k-calendar-container');
+                            if (cal) cal.scrollIntoView({block: 'center', behavior: 'instant'});
+                        """)
+                        time.sleep(1.0) # Settle suresi
+                    
+                    # ─── ADIM 2: DOĞRU AYA GİT ────────────────────────────────────────
+                    if target_month:
+                        self._log(logging.INFO, f"  [CAL] Adim 2/3: '{target_month}' ayina gidiliyor...")
+                        for nav_attempt in range(18):  # Max 18 ay ileri
+                            # Görünür takvim başlığını oku
+                            title_text = self.driver.execute_script("""
+                                var activeCal = document.querySelector('.k-animation-container .k-calendar-container, .k-calendar-container.k-state-border-down') || document;
+                                var cands = activeCal.querySelectorAll(
+                                    '.k-nav-fast, .k-calendar-header .k-title, .k-calendar .k-header .k-title'
+                                );
+                                for (var i = 0; i < cands.length; i++) {
+                                    var r = cands[i].getBoundingClientRect();
+                                    if (r.width > 0 && r.height > 0) return cands[i].innerText || '';
+                                }
+                                return '';
+                            """) or ""
+                            
+                            self._log(logging.DEBUG, f"    [NAV] Mevcut ay: '{title_text.strip()}' | Hedef: '{target_month}'")
+                            
+                            # title_text = "March 2026" ve target_month = "March 2026" şeklinde olmalı
+                            # Ayın adını ve yılını karşılaştır (büyük/küçük harf duyarsız)
+                            target_parts = target_month.lower().split()
+                            title_lower = title_text.lower()
+                            if all(p in title_lower for p in target_parts):
+                                self._log(logging.INFO, f"  [CAL] Dogru ayda: '{title_text.strip()}'")
+                                break
+                            
+                            # Görünür Next butonunu bul ve tıkla
+                            next_ok = self.driver.execute_script("""
+                                function isReal(el) {
+                                    var r = el.getBoundingClientRect();
+                                    if (r.width <= 0 || r.height <= 0) return false;
+                                    if (r.right < -50) return false;
+                                    var c = el;
+                                    while (c) {
+                                        var s = window.getComputedStyle(c);
+                                        if (s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)===0) return false;
+                                        c = c.parentElement;
+                                    }
+                                    return true;
+                                }
+                                var activeCal = document.querySelector('.k-animation-container .k-calendar-container, .k-calendar-container.k-state-border-down') || document;
+                                var btn = Array.from(activeCal.querySelectorAll(
+                                    '.k-nav-next, .k-calendar-nav-next, [aria-label="Next"]'
+                                )).find(isReal);
+                                if (btn) {
+                                    btn.scrollIntoView({block: 'center', behavior: 'instant'});
+                                    btn.click(); 
+                                    return true; 
+                                }
+                                return false;
+                            """)
+                            
+                            if not next_ok:
+                                self._log(logging.WARNING, f"  [CAL] 'Sonraki Ay' butonu bulunamadi (deneme {nav_attempt+1}), yeniden deneniyor...")
+                                time.sleep(0.5)
+                                continue  # break değil continue: takvim yeniden render olmuş olabilir
+                            
+                            # Ay değişiminin DOM'a yansımasını bekle
+                            try:
+                                WebDriverWait(self.driver, 4).until(
+                                    EC.staleness_of(self.driver.find_element(By.CSS_SELECTOR, "table[role='grid']"))
+                                )
+                            except Exception:
+                                time.sleep(1.0)
+                        else:
+                            self._log(logging.WARNING, f"  [CAL] 18 denemede '{target_month}' ayina ulasılamadi!")
+                    
+                    # ─── ADIM 3: YEŞİL GÜNÜ BUL VE TIKLA ─────────────────────────────
+                    # Anahtar: $(link).trigger('click') - Kendo'nun kendi event handler'ını çağırır.
+                    # Bu, BLS sitesinde subagent tarafından KANITLANMIŞ tek çalışan yöntemdir.
+                    self._log(logging.INFO, f"  [CAL] Adim 3/3: Takvimde gun '{day_num}' aranip jQuery trigger ile tiklaniyor...")
+                    
+                    # Takvim grid'inin güncel DOM'da olduğunu garantile
+                    try:
+                        WebDriverWait(self.driver, 5).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, "td[role='gridcell'] .k-link"))
+                        )
+                    except Exception:
+                        pass
+                    
+                    click_result = self.driver.execute_script("""
+                        var day_num = arguments[0];
+                        var activeCal = document.querySelector('.k-animation-container .k-calendar-container, .k-calendar-container.k-state-border-down') || document;
+                        
+                        // SADECE aktif takvimin (k-other-month olmayan), devre dışı olmayan hücrelerini tara
+                        var cells = activeCal.querySelectorAll(
+                            "td[role='gridcell']:not(.k-other-month):not(.k-state-disabled) .k-link"
+                        );
+                        
+                        var processedCells = [];
+                        
+                        for (var i = 0; i < cells.length; i++) {
+                            var link = cells[i];
+                            var txt = link.textContent.trim();
+                            
+                            var r = link.getBoundingClientRect();
+                            var bg = window.getComputedStyle(link).backgroundColor;
+                            
+                            if (txt === day_num) {
+                                processedCells.push(txt + (r.width>0?'(VIS)':'(HID)') + '[' + bg + ']');
+                                
+                                // Boyut 0 ise atla
+                                if (r.width <= 0 || r.height <= 0) continue;
+                                
+                                var nums = bg.match(/[0-9]+/g);
+                                if (!nums || nums.length < 3) continue;
+                                var R = parseInt(nums[0]), G = parseInt(nums[1]), B = parseInt(nums[2]);
+                                
+                                // Yeşil renk: G > 100 VE G > R'nin 2 katı
+                                if (G <= 100 || G <= R * 2) continue;
+                                
+                                // TIKLA: jQuery trigger
+                                link.scrollIntoView({block: 'center', behavior: 'instant'});
+                                if (typeof $ !== 'undefined') {
+                                    $(link).trigger('click');
+                                    return 'OK:' + txt + ':' + bg;
+                                } else {
+                                    link.parentElement.click();
+                                    return 'TD_CLICK:' + txt;
+                                }
+                            }
+                        }
+                        
+                        return 'NOT_FOUND|cells=' + processedCells.join(',');
+                    """, str(day_num))
+                    
+                    self._log(logging.INFO, f"  [CAL] click_result: {click_result}")
+                    
+                    if not click_result or str(click_result).startswith('NOT_FOUND'):
+                        self._log(logging.ERROR, f"  [CAL] Gun '{day_num}' bulunamadi. Debug: {click_result}")
+                        return False
+                    
+                    self._log(logging.INFO, f"  [CAL] Tarihe basarıyla tiklandi: {click_result}")
+                    
+                    date_clicked = True   # Tarih başarıyla seçildi
+                    slot_selected = False  # Sıfırla (önemli, önceki değer olabilir)
+                    
+                    # ─── ADIM 4: AJAX'IN BİTMESİNİ BEKLE ─────────────────────────────
+                    # blockUI spinner kaybolunca AJAX tamamdır - time.sleep değil, WebDriverWait!
+                    self._log(logging.INFO, "  [CAL] AJAX spinner'i bekleniyor...")
+                    try:
+                        WebDriverWait(self.driver, 15).until(
+                            EC.invisibility_of_element_located((By.CSS_SELECTOR, ".blockUI.blockOverlay"))
+                        )
+                    except Exception:
+                        self._log(logging.WARNING, "  [CAL] Spinner 15s'de kaybolmadi, devam ediliyor.")
+                    
+                    # DOM'un settle olmasını bekle (AJAX sonrası render)
+                    try:
+                        WebDriverWait(self.driver, 5).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, "[id*='Slot'], #ddlAppointmentSlot, select"))
+                        )
+                    except Exception:
+                        time.sleep(1.5)
+                                
+
+                    # 5. Saat Seçimi - Önce AJAX'ın bitmesini ve slotların yüklenmesini bekle
+                    self._log(logging.INFO, "  [SLOT] Tarih seçimi sonrası saat slotlarının yüklenmesi bekleniyor...")
+                    
+                    # Loading spinner kaybolunca AJAX bitti
+                    try:
+                        WebDriverWait(self.driver, 15).until(
+                            EC.invisibility_of_element_located((By.CSS_SELECTOR, ".blockUI.blockOverlay, .k-loading-mask"))
+                        )
+                    except Exception:
+                        pass
+                    
+                    # '--Select--' dropdown'unun görünmesini bekle (slotlar yüklendi)
+                    try:
+                        WebDriverWait(self.driver, 10).until(
+                            lambda d: d.execute_script("""
+                                function isVis(el){var c=el;while(c){var s=window.getComputedStyle(c);
+                                if(s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)===0)return false;
+                                c=c.parentElement;}return true;}
+                                return Array.from(document.querySelectorAll('span,div'))
+                                    .some(el=>el.textContent.trim()==='--Select--'&&isVis(el));
+                            """)
+                        )
+                        self._log(logging.INFO, "  [SLOT] Saat dropdown'u hazır!")
+                    except Exception:
+                        self._log(logging.WARNING, "  [SLOT] 10s içinde --Select-- bulunamadı, yine de devam ediliyor...")
+                    
+                    time.sleep(2.5)  # DOM animasyon + AJAX sonrası render settle süresi
+                    
+                    self._log(logging.INFO, "  [SLOT] Saat dropdown'u açılıyor...")
+                    
+                    # ADIM 5a: Dropdown'u aç (--Select-- span/div'e tıkla)
+                    opened_dropdown = self.driver.execute_script("""
+                        function isReal(el) {
+                            var r = el.getBoundingClientRect();
+                            if (r.width <= 0 || r.height <= 0) return false;
+                            // Sadece tamamen ekran dışına taşınmış (sol negatif = honeypot) engelle
+                            if (r.right < -50) return false;
+                            var c = el;
+                            while (c) {
+                                var s = window.getComputedStyle(c);
+                                if (s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)===0) return false;
+                                c = c.parentElement;
+                            }
+                            return true;
+                        }
+                        // Dropdown'u viewport'a getir (sayfa altında olabilir)
+                        var anyDd = document.querySelector('.k-dropdown .k-dropdown-wrap, .k-widget.k-dropdown');
+                        if (anyDd) anyDd.scrollIntoView({block: 'center', behavior: 'instant'});
+                        // Kendo DropDownList için .k-dropdown-wrap veya --Select-- içeren span'ı bul
+                        var dropdown = Array.from(document.querySelectorAll(
+                            '.k-dropdown .k-dropdown-wrap, .k-widget.k-dropdown'
+                        )).find(isReal);
+                        if (dropdown) {
+                            if (typeof $ !== 'undefined') { $(dropdown).trigger('click'); }
+                            else { dropdown.click(); }
+                            return 'opened:dropdown-wrap';
+                        }
+                        // Fallback: --Select-- metnini içeren görünür öğe
+                        var sel = Array.from(document.querySelectorAll('span, div')).find(
+                            el => el.textContent.trim() === '--Select--' && isReal(el)
+                        );
+                        if (sel) {
+                            if (typeof $ !== 'undefined') { $(sel).trigger('click'); }
+                            else { sel.click(); }
+                            return 'opened:select-text';
+                        }
+                        return 'NOT_FOUND';
+                    """)
+                    
+                    self._log(logging.INFO, f"  [SLOT] Dropdown acildi: {opened_dropdown}")
+                    
+                    if not opened_dropdown or opened_dropdown == 'NOT_FOUND':
+                        self._log(logging.WARNING, "  [SLOT] Dropdown bulunamadi!")
+                        slot_selected = False
+                    else:
+                        # ADIM 5b: Seçeneklerin görünmesini ve animasyonun bitmesini bekle
+                        # Kendo UI, dropdown'u açarken bir animasyon container kullanır. 
+                        # Animasyon bitmeden tıklarsak, widget state bozulur ve sayfa takılır.
+                        self._log(logging.INFO, "  [SLOT] Dropdown animasyonunun ve AJAX'in tamamlanmasi bekleniyor...")
+                        
+                        try:
+                            # .k-animation-container div'inin gorunur duruma gelmesini bekliyoruz
+                            WebDriverWait(self.driver, 5).until(
+                                lambda d: d.execute_script("""
+                                    var containers = document.querySelectorAll('.k-animation-container');
+                                    for(var i=0; i<containers.length; i++) {
+                                        var style = window.getComputedStyle(containers[i]);
+                                        // Animasyon suresi bitince overflow:visible veya hidden gibi state degisikliklerine oturur
+                                        // Biz sadece container'in display:block ve opacity > 0 oldugundan emin oluyoruz
+                                        if(style.display !== 'none' && parseFloat(style.opacity) > 0) {
+                                            return true;
+                                        }
+                                    }
+                                    return false;
+                                """)
+                            )
+                        except Exception:
+                            self._log(logging.WARNING, "  [SLOT] Animasyon container timeout, devam ediliyor.")
+                            time.sleep(1) # Fallback DOM settling
+                        
+                        # ADIM 5c: İlk geçerli saat seçeneğini Deterministic JS ile seç
+                        # Ekranda acik olan popup'in icindeki listeyi bulmak icin 
+                        # butun options'lari tarayip, honeypot viewport kontrolleri YERINE
+                        # popup parentinin gorunurlugune bakacagiz (cunku popup fold disinda olabilir).
+                        slot_selected = self.driver.execute_script("""
+                            function isNodeTrueVisible(el) {
+                                var r = el.getBoundingClientRect();
+                                if (r.width <= 0 || r.height <= 0) return false;
+                                // Popup'lar viewport disina tasabilir, o yuzden r.top > H kullanmiyoruz.
+                                // Sadece gercekten gizlenmis veya "left:-9999px" olanlari eliyoruz.
+                                if (r.right < -50) return false;
+                                var c = el;
+                                while (c) {
+                                    var s = window.getComputedStyle(c);
+                                    if (s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)===0) return false;
+                                    c = c.parentElement;
+                                }
+                                return true;
+                            }
+                            
+                            // Acik popup olan listbox'lari (k-list-container) bul
+                            var activeLists = Array.from(document.querySelectorAll('.k-animation-container .k-list-container, .k-widget.k-listbox'))
+                                .filter(isNodeTrueVisible);
+                            
+                            if (activeLists.length === 0) {
+                                return 'NO_OPEN_POPUP';
+                            }
+                            
+                            var activeList = activeLists[0];
+                            // '--Select--' harici, sadece YESIL (bos) olan tum optionlari bul
+                            var options = Array.from(activeList.querySelectorAll('li[role="option"]')).filter(function(li) {
+                                var t = li.textContent.trim();
+                                if (t === '--Select--' || t === '' || li.classList.contains('k-state-disabled') || !isNodeTrueVisible(li)) return false;
+                                
+                                // Kirmizi/dolu slotlari secme hatasini onlemek icin background rengine bak:
+                                // Option icinde div varsa onun rengine, yoksa li'nin rengine bakilir
+                                var colorNode = li.querySelector('div') || li;
+                                var bg = window.getComputedStyle(colorNode).backgroundColor;
+                                var nums = bg.match(/[0-9]+/g);
+                                
+                                if (nums && nums.length >= 3) {
+                                    var R = parseInt(nums[0]), G = parseInt(nums[1]), B = parseInt(nums[2]);
+                                    
+                                    // SADECE Gorkemli Yesil (G > 100 ve G > R'nin 1.25 kati) ise musaittir.
+                                    // Kirmizi (R > 200) veya Sari (R>200, G>200) dolar.
+                                    // Eger saydam degilse (R=0,G=0,B=0,A=0), kirmizi atla
+                                    if (R !== 0 || G !== 0 || B !== 0) {
+                                        if (G <= 100 || G <= R * 1.25) return false;
+                                    }
+                                }
+                                return true;
+                            });
+                            
+                            if (options.length > 0) {
+                                var opt = options[0];
+                                // Ilgili dropdown objesini Kendo API uzerinden tetiklemek daha saglikli
+                                // ama once UI uzerinden tiklayacagiz. jQuery'nin trigger click'i kendo eventlerini dogru baglar.
+                                opt.scrollIntoView({block: 'nearest', behavior: 'instant'});
+                                if (typeof $ !== 'undefined') { $(opt).trigger('click'); }
+                                else { opt.click(); }
+                                return 'SELECTED:' + opt.textContent.trim();
+                            }
+                            
+                            // Debug: mevcut li'leri dondur
+                            return 'NO_VALID_OPTIONS|tot=' + activeList.querySelectorAll('li').length;
+                        """)
+                        
+                        if isinstance(slot_selected, str) and slot_selected.startswith('SELECTED'):
+                            self._log(logging.INFO, f"  [SLOT] Saat basariyla secildi: {slot_selected}")
+                            slot_selected = True
+                        else:
+                            self._log(logging.WARNING, f"  [SLOT] Saat secilemedi. Debug sonucu: {slot_selected}")
+                            slot_selected = False
+
+                    
+                    time.sleep(1)
+                    
+                    if date_clicked and slot_selected:
+                        self._log(logging.INFO, "  >> Submit (Onayla) tuşuna Python üzerinden basılıyor.")
+                        
+                        # Sadece gorunur olan Submit butonunu bul (Honeypot korumasi JS Treewalk)
+                        js_submit = """
+                            function isVisible(el) {
+                                var curr = el;
+                                while (curr) {
+                                    var style = window.getComputedStyle(curr);
+                                    if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) return false;
+                                    curr = curr.parentElement;
+                                }
+                                return true;
+                            }
+                            var submitBtn = document.querySelector('#btnSubmit, input[value="Submit"], input[type="submit"]');
+                            if (submitBtn && isVisible(submitBtn)) {
+                                submitBtn.click();
+                                return true;
+                            }
+                            return false;
+                        """
+                        submit_success = self.driver.execute_script(js_submit)
+                        if submit_success:
+                             self._log(logging.INFO, "  >> Submit tuşuna başarıyla NATIVE JS ile tıklandı.")
+                        else:
+                             self._log(logging.ERROR, "  >> [KRİTİK NATIVE HATA] Görünür bir 'Submit' tuşu bulunamadı (Honeypot müdahalesi?).")
+                    
+                    time.sleep(4) # Submit sonrası diğer sayfaya geçiş için kilit bekleme
+                except Exception as e:
+                    self._log(logging.ERROR, f"  Takvim hatası: {e}")
+                    date_clicked = False
+                    slot_selected = False
+                    
+                if not date_clicked or not slot_selected:
+                    self._log(logging.WARNING, "  Takvim/Zaman seçilemedi. İptal ediliyor")
+                    return False
+
+            # --- 4) Applicant Selection / Travel Details / Photo Upload / OTP ---
+            current_url = self.driver.current_url
+            if "ApplicantSelection" in current_url:
+                self._log(logging.INFO, "  >> Applicant Selection sayfası algılandı.")
+
+                try:
+                    # HATA DÜZELTME: Travel Date, Arrival Date, Departure Date Doldurma (JS Injection ile)
+                    self._log(logging.INFO, "  Aday seçimi sayfasındaki yeni seyahat tarih alanları dolduruluyor...")
+                    self.driver.execute_script("""
+                        try {
+                            // Find all datepickers on this page
+                            var datePickers = document.querySelectorAll("input[data-role='datepicker']");
+                            
+                            // Let's assume the appointment is today physically for the sake of calculation length
+                            var today = new Date();
+                            
+                            // Travel Date: +30 Days
+                            var travelDate = new Date();
+                            travelDate.setDate(today.getDate() + 30);
+                            
+                            // Departure Date: +60 Days
+                            var depDate = new Date();
+                            depDate.setDate(today.getDate() + 60);
+
+                            // Set values if they exist
+                            for (var i = 0; i < datePickers.length; i++) {
+                                var widget = $(datePickers[i]).data("kendoDatePicker");
+                                if (widget) {
+                                    var inputId = datePickers[i].id.toLowerCase();
+                                    if (inputId.indexOf("travel") !== -1 || inputId.indexOf("arrival") !== -1) {
+                                        widget.value(travelDate);
+                                        widget.trigger("change");
+                                    } else if (inputId.indexOf("departure") !== -1) {
+                                        widget.value(depDate);
+                                        widget.trigger("change");
+                                    } else {
+                                        // Default fallback fallback
+                                        widget.value(travelDate);
+                                        widget.trigger("change");
+                                    }
+                                }
+                            }
+                        } catch(e) {
+                            console.error('Travel Date Injection Error', e);
+                        }
+                    """)
+                    time.sleep(1)
+
+                    # Adayı (Örnek: "1 Person") seçmek (RadioButton) JS ile
+                    self._log(logging.INFO, "  Aday radio butonu aktif ediliyor...")
+                    self.driver.execute_script("""
+                        try {
+                            var radios = document.querySelectorAll("input[type='radio']");
+                            for (var i = 0; i < radios.length; i++) {
+                                if (radios[i].value === "1") {
+                                    radios[i].click();
+                                    break;
+                                }
+                            }
+                        } catch (e) {}
+                    """)
+                    time.sleep(1)
+
+                    # Photo Upload Bölümü
+                    self._log(logging.INFO, "  Stock vesikalık fotoğraf yükleniyor...")
+                    file_input = self._find_element_multi([
+                        (By.ID, "PassportCopy"),
+                        (By.XPATH, "//input[@type='file']")
+                    ], timeout=3)
+                    
+                    if file_input:
+                        stock_photo_path = os.path.join(os.getcwd(), "test_photo.jpg")
+                        if not os.path.exists(stock_photo_path):
+                            # Dosya yoksa dummy bir dosya yarat (Sistemi kandırmak için)
+                            with open(stock_photo_path, "wb") as f:
+                                # Geçerli bir JPEG header'ı ile 1 piksel oluştur
+                                f.write(b'\xFF\xD8\xFF\xE0\x00\x10JFIF\x00\x01\x01\x01\x00H\x00H\x00\x00\xFF\xDB\x00C\x00\x05\x03\x04\x04\x04\x03\x05\x04\x04\x04\x05\x05\x05\x06\x07\x0C\x08\x07\x07\x07\x0F\x0B\x0B\t\x0C\x11\x0F\x12\x12\x11\x0F\x11\x11\x13\x16\x1C\x17\x13\x14\x1A\x15\x11\x11\x18!\x18\x1A\x1D\x1D\x1F\x1F\x1F\x13\x17"$x\x1E$\x1C\x1E\x1F\x1E\xFF\xDB\x00C\x01\x05\x05\x05\x07\x06\x07\x0E\x08\x08\x0E\x1E\x14\x11\x14\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\x1E\xFF\xC0\x00\x0B\x08\x00\x01\x00\x01\x03\x01"\x00\x02\x11\x01\x03\x11\x01\xFF\xC4\x00\x1F\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0B\xFF\xC4\x00\xB5\x10\x00\x02\x01\x03\x03\x02\x04\x03\x05\x05\x04\x04\x00\x00\x01}\x01\x02\x03\x00\x04\x11\x05\x12!1A\x06\x13Qa\x07"q\x142\x81\x91\xA1\x08#B\xB1\xC1\x15R\xD1\xF0$3br\x82\t\n\x16\x17\x18\x19\x1A%&\'()*456789:CDEFGHIJSTUVWXYZcdefghijstuvwxyz\x83\x84\x85\x86\x87\x88\x89\x8A\x92\x93\x94\x95\x96\x97\x98\x99\x9A\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xF1\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFF\xC4\x00\x1F\x01\x00\x03\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0B\xFF\xC4\x00\xB5\x11\x00\x02\x01\x02\x04\x04\x03\x04\x07\x05\x04\x04\x00\x01\x02w\x00\x01\x02\x03\x11\x04\x05!1\x06\x12AQ\x07aq\x13"2\x81\x08\x14B\x91\xA1\xB1\xC1\t#3R\xF0\x15br\xD1\n\x16$4\xE1%\xF1\x17\x18\x19\x1A&\'()*56789:CDEFGHIJSTUVWXYZcdefghijstuvwxyz\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x92\x93\x94\x95\x96\x97\x98\x99\x9A\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFF\xDA\x00\x0C\x03\x01\x00\x02\x11\x03\x11\x00?\x00\xF5Z\xA8\xBF\xFF\xD9')
+
+                        file_input.send_keys(stock_photo_path)
+                        self._log(logging.INFO, "  Fotoğraf seçildi: " + stock_photo_path)
+                        
+                        # Upload Trigger button
+                        btn_upload = self._find_element_multi([
+                            (By.ID, "btnUpload"),
+                            (By.XPATH, "//input[@value='Upload']")
+                        ], timeout=2)
+                        if btn_upload:
+                            try: btn_upload.click()
+                            except: self.driver.execute_script("arguments[0].click();", btn_upload)
+                            time.sleep(2)
+                    
+                    # OTP Talebi ve Okunması
+                    try:
+                        self._log(logging.INFO, "  OTP gönderimi tetikleniyor...")
+                        btn_otp = self._find_element_multi([
+                            (By.ID, "btnSendOTP"),
+                            (By.XPATH, "//input[@value='Request OTP']"),
+                            (By.XPATH, "//input[contains(@value, 'OTP')]")
+                        ], timeout=2)
+                        if btn_otp:
+                            try: btn_otp.click()
+                            except: self.driver.execute_script("arguments[0].click();", btn_otp)
+                            self._log(logging.INFO, "  OTP tuşuna basıldı, email (IMAP) üzerinden kod bekleniyor...")
+                            
+                            # EmailReader Modülü'nü Çağır (3 Dakika Süre Ver)
+                            # E-posta parametreleri GlobalUserCredentials içinden alınır
+                            from bot.email_reader import OTPReader
+                            
+                            # Manager.py'dan email_creds parametresi global statelerden geliyor olabilir
+                            # Şimdilik kullanıcı ayarlarına fallback yapacağız.
+                            email_address = self.user_data.get("email")
+                            app_password  = self.user_data.get("email_app_password")
+                            
+                            if not email_address or not app_password:
+                                self._log(logging.ERROR, "  ❌ IMAP için E-posta adresi veya Uygulama Şifresi bulunamadı! OTP okunamaz.")
+                            else:
+                                from config.database import GlobalSettingsRepository
+                                from config.security import _decrypt
+                                try:
+                                    repo = GlobalSettingsRepository()
+                                    db_pw = repo.get_setting("email_app_password")
+                                    if db_pw:
+                                        app_password = _decrypt(db_pw)
+                                except: pass
+                                
+                                reader = OTPReader(email_address, app_password)
+                                otp_code = reader.wait_for_bls_otp(timeout=180, check_interval=10)
+                                    
+                                if otp_code:
+                                    self._log(logging.INFO, f"  ✅ IMAP Üzerinden OTP Başarıyla Okundu: {otp_code}")
+                                    otp_input = self.driver.find_element(By.ID, "OTPCode") # ID genelde bu
+                                    otp_input.clear()
+                                    otp_input.send_keys(otp_code)
+                                    
+                                    # Verify Butonu Yoksa da sorun değil, bazen otomatik geçiyor
+                                    btn_verify = self._find_element_multi([(By.ID, "btnVerifyOTP")], timeout=1)
+                                    if btn_verify:
+                                        try: btn_verify.click()
+                                        except: self.driver.execute_script("arguments[0].click();", btn_verify)
+                                        time.sleep(2)
+                                else:
+                                    self._log(logging.ERROR, "  ❌ Verilen sürede IMAP'e OTP maili düşmedi.")
+                    except Exception as otp_e:
+                        self._log(logging.WARNING, f"  OTP handling sırasında hata: {otp_e}")
+
+                    # Final Devam/Submit (Applicant Selection)
+                    btn_submit = self._find_element_multi([
+                        (By.ID, "btnSubmit"),
+                        (By.TAG_NAME, "button")
+                    ])
+                    if btn_submit:
+                        self._log(logging.INFO, "  >> Submit/Proceed (Applicant Selection) butonuna basılıyor.")
+                        self.driver.execute_script("arguments[0].click();", btn_submit)
+                        time.sleep(5)
+                except Exception as ex:
+                    self._log(logging.ERROR, f"  Applicant Selection adımında hata: {ex}")
+                    return False
+
+            # --- 5) Extra Services / VAS Services ---
+            current_url = self.driver.current_url
+            if "VASSelection" in current_url or "Premium" in current_url or "Service" in current_url:
+                self._log(logging.INFO, "  >> Extra Services (VASSelection) sayfası algılandı. Atlanıyor (Skip).")
+                try:
+                    self.driver.execute_script("""
+                        var skipBtns = document.querySelectorAll("input[value='Skip'], button:contains('Skip'), a:contains('Skip')");
+                        if(skipBtns.length > 0) { skipBtns[0].click(); }
+                        else {
+                           var btn = document.getElementById("btnSkip");
+                           if(btn) btn.click();
+                        }
+                    """)
+                    time.sleep(3)
+                except Exception as e:
+                    self._log(logging.ERROR, f"VASSelection atlama hatası: {e}")
+
+            # --- 6) Payment / Final Booking Confirmation ---
+            current_url = self.driver.current_url
+            if "Payment" in current_url or "Booking" in current_url or "Confirm" in current_url:
+                self._log(logging.INFO, "  >> Payment / Booking Confirmation sayfası algılandı.")
+                
+                # Gizlilik Politikası Onay Kutusu (Eğer Varsa)
+                try:
+                    self.driver.execute_script("""
+                        var chk = document.getElementById("PrivacyPolicy");
+                        if(chk && !chk.checked) chk.click();
+                        var chk2 = document.getElementById("TermsAndConditions");
+                        if(chk2 && !chk2.checked) chk2.click();
+                    """)
+                except: pass
+
+                # Book Appointment Button
+                btn_book = self._find_element_multi([
+                    (By.ID, "btnBook"),
+                    (By.ID, "btnSubmit"),
+                    (By.XPATH, "//input[@value='Book Appointment']"),
+                    (By.XPATH, "//input[@value='Pay Now']"),
+                    (By.XPATH, "//input[contains(@value, 'Book')]")
+                ], timeout=3)
+                
+                if btn_book:
+                    self._log(logging.INFO, "  >> Son 'Book Appointment' (veya Pay) tuşuna basılıyor...")
+                    try:
+                        btn_book.click()
+                    except:
+                        self.driver.execute_script("arguments[0].scrollIntoView(); arguments[0].click();", btn_book)
+                else:
+                    self._log(logging.WARNING, "  Final sayfasında Book butonu bulunamadı, script ile Form post ediliyor...")
+                    try:
+                        self.driver.execute_script("document.forms[0].submit();")
+                    except: pass
+            
+            # ── Başarı kontrolü (Congratulations) ─────────────────────────────
+            current_url = self.driver.current_url.lower()
+            if "payment" in current_url or "booking" in current_url or "confirm" in current_url or "success" in current_url or "receipt" in current_url:
+                try:
+                    time.sleep(5) # Son sayfanın (Congratulations) yüklenmesini bekle
+                    page_text = self.driver.find_element(By.TAG_NAME, "body").text.lower()
+                    success_keywords = ["success", "congratulations", "başarı", "onaylandı", "appointment booked", "booking confirmed", "appointment summary"]
+                    
+                    if any(kw in page_text for kw in success_keywords):
+                        self._log(logging.INFO, "🎉 RANDEVU BAŞARIYLA ALINDI! (Congratulations ekranı yakalandı)")
+                        METRIC_BOOKING_SUCCESS.inc()
+                        
+                        # Randevu detaylarını JS ile çekmeye çalış (Discord/DB Tarafı İçin)
+                        booking_info = self.driver.execute_script("""
+                            var info = { no: "Bulunamadı", date: "Bulunamadı", time: "Bulunamadı" };
+                            // Genellikle tablo (th/td) veya span formatındadır
+                            var ths = document.querySelectorAll("td, th, span, div");
+                            for (var i = 0; i < ths.length; i++) {
+                                var t = ths[i].innerText.toLowerCase();
+                                if (t.indexOf("appointment no") !== -1 || t.indexOf("reference") !== -1) {
+                                    info.no = ths[i].nextElementSibling ? ths[i].nextElementSibling.innerText.trim() : (ths[i+1] ? ths[i+1].innerText.trim() : info.no);
+                                }
+                                if (t.indexOf("appointment date") !== -1 && t === "appointment date:") {
+                                    info.date = ths[i].nextElementSibling ? ths[i].nextElementSibling.innerText.trim() : (ths[i+1] ? ths[i+1].innerText.trim() : info.date);
+                                }
+                                if (t.indexOf("appointment time") !== -1) {
+                                    info.time = ths[i].nextElementSibling ? ths[i].nextElementSibling.innerText.trim() : (ths[i+1] ? ths[i+1].innerText.trim() : info.time);
+                                }
+                            }
+                            // Sayfadan okuyamazsa URL'deki referansı deneyelim
+                            if (info.no === "Bulunamadı" && window.location.href.indexOf("ref=") !== -1) {
+                                info.no = window.location.href.split("ref=")[1].split("&")[0];
+                            }
+                            return info;
+                        """)
+                        
+                        log_msg = f"📝 Randevu Detayları: ID=[{booking_info.get('no')}], Date=[{booking_info.get('date')}], Time=[{booking_info.get('time')}]"
+                        self._log(logging.INFO, log_msg)
+                        return True
+                    else:
+                        self._log(logging.WARNING, "Submission gerçekleşti ancak onay ekranı (Congratulations) gelmedi veya site yavaşlıktan çöktü. Tarama devam edecek...")
+                        return False  # İşlem tamamlanmadı say ve tekrar denenmesine izin ver
+                except Exception as e:
+                    self._log(logging.ERROR, f"Başarı ekranı kontrol hatası (Site yüklenmemiş olabilir): {e}")
+                    return False
+            else:
+                self._log(logging.WARNING, f"Randevu alımı onay sayfasına ulaşamadı. Kalan URL: {current_url}")
+                return False
+
+        except Exception as e:
+            self._log(logging.ERROR, f"Randevu alma genel hatası: {e}")
             return False

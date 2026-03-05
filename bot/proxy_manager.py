@@ -2,7 +2,7 @@ import threading
 import time
 import datetime
 import logging
-from config.database import get_all_proxies, add_proxy, update_proxy_stats
+from data.repositories import ProxyRepository
 from config.cache import redis_manager
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ class ProxyManager:
 
     def load_proxies_from_db(self):
         try:
-            db_proxies = get_all_proxies()
+            db_proxies = ProxyRepository.get_all()
             self.proxies = db_proxies
             logger.info(f"Loaded {len(self.proxies)} proxies from database.")
             
@@ -104,7 +104,7 @@ class ProxyManager:
         """Imports a list of proxies (strings) into the database."""
         for p in proxy_list:
             if p.strip():
-                add_proxy(p.strip())
+                ProxyRepository.create(p.strip())
         self.load_proxies_from_db()
 
     def _is_proxy_available(self, proxy_dict):
@@ -209,7 +209,10 @@ class ProxyManager:
             r.hincrby(key, "success_count", 1)
             r.hset(key, "consecutive_fails", 0)
             
-        threading.Thread(target=update_proxy_stats, args=(address, True), daemon=True).start()
+        # Instead of generic update_proxy_stats, use ProxyRepository
+        def _bg_success():
+            ProxyRepository.update_proxy_status(address, "Active", success_increment=1, consecutive_fails=0)
+        threading.Thread(target=_bg_success, daemon=True).start()
 
     def report_failure(self, address, error_type="general"):
         if not address: return
@@ -227,13 +230,50 @@ class ProxyManager:
                 )
                 if disabled:
                     logger.error(f"🔴 ATOMIC: Proxy {address} eşiği aştı ({error_type}). 30dk cooldown.")
+                    # P2: Cascading disable circuit breaker
+                    self._check_circuit_breaker(r)
             except Exception as e:
                 logger.error(f"Lua script error: {e}")
                 # Fallback to non-atomic if Lua fails (shouldn't happen)
                 r.hincrby(key, "fail_count", 1)
                 r.hincrby(key, "consecutive_fails", 1)
 
-        threading.Thread(target=update_proxy_stats, args=(address, False), daemon=True).start()
+        def _bg_fail():
+            # If it was disabled by Lua, pass that to Postgres
+            if 'disabled' in locals() and disabled:
+                dt = (datetime.datetime.now() + datetime.timedelta(seconds=1800)).strftime("%Y-%m-%d %H:%M:%S")
+                ProxyRepository.update_proxy_status(address, "Disabled", fail_increment=1, consecutive_fails=5, disabled_until=dt)
+            else:
+                ProxyRepository.update_proxy_status(address, "Active", fail_increment=1)
+                
+        threading.Thread(target=_bg_fail, daemon=True).start()
+
+    def _check_circuit_breaker(self, r):
+        """P2: If >60% proxies are disabled, it's a site-wide issue — re-enable all."""
+        try:
+            active_count = r.scard("Proxy:ActiveList")
+            cooldown_count = r.zcard("Proxy:CooldownQueue")
+            total = active_count + cooldown_count
+            
+            if total == 0:
+                return
+            
+            disabled_ratio = cooldown_count / total
+            if disabled_ratio > 0.6:
+                logger.critical(
+                    f"🚨 CIRCUIT BREAKER: {cooldown_count}/{total} proxy devre dışı (>{int(disabled_ratio*100)}%). "
+                    f"Site çapında sorun şüphesi — tüm proxy'ler yeniden etkinleştiriliyor!"
+                )
+                # Move all cooldown proxies back to active
+                cooldown_members = r.zrangebyscore("Proxy:CooldownQueue", 0, float('inf'))
+                for addr in cooldown_members:
+                    r.zrem("Proxy:CooldownQueue", addr)
+                    r.sadd("Proxy:ActiveList", addr)
+                    r.hset(f"Proxy:Metrics:{addr}", "consecutive_fails", 0)
+                    r.hset(f"Proxy:Metrics:{addr}", "status", "Active")
+                logger.info(f"✅ Circuit breaker: {len(cooldown_members)} proxy yeniden etkinleştirildi.")
+        except Exception as e:
+            logger.error(f"Circuit breaker kontrolü hatası: {e}")
 
     def report_release(self, address):
         """Decrements the active connections counter."""

@@ -1,21 +1,93 @@
 import time
+import os
+import json
 import random
 import threading
 import logging
 import queue
+import collections
 import datetime
 from bot.scraper import BLSScraper
-from config.database import get_active_users, update_user_status
+from data.repositories import UserRepository, GlobalSettingsRepository
 from bot.dispatcher import scout_dispatcher
 
 logger = logging.getLogger(__name__)
 
+# ════════════════════════════════════════════════════════════════════════════
+# P1: Thread-safe file log writing + JSON log rotation
+# ════════════════════════════════════════════════════════════════════════════
+
+_file_log_lock = threading.Lock()
+
+MAX_LOG_FILE_SIZE = 50 * 1024 * 1024   # 50 MB
+MAX_ROTATED_FILES = 3                   # Keep 3 rotated copies
+
+
+def _rotate_log_if_needed(json_path):
+    """Rotate telemetry_metrics.json when it exceeds MAX_LOG_FILE_SIZE."""
+    try:
+        if not os.path.exists(json_path):
+            return
+        if os.path.getsize(json_path) < MAX_LOG_FILE_SIZE:
+            return
+        # Rotate: .json → .json.1 → .json.2 → .json.3 (oldest deleted)
+        for i in range(MAX_ROTATED_FILES, 0, -1):
+            src = f"{json_path}.{i}"
+            dst = f"{json_path}.{i + 1}"
+            if os.path.exists(src):
+                if i >= MAX_ROTATED_FILES:
+                    os.remove(src)
+                else:
+                    os.rename(src, dst)
+        os.rename(json_path, f"{json_path}.1")
+        logger.info(f"📁 Log dosyası döndürüldü: {json_path}")
+    except Exception:
+        pass
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# P3: LogFanOut — non-destructive ring buffer for multiple consumers
+# ════════════════════════════════════════════════════════════════════════════
+
+class LogFanOut:
+    """Thread-safe ring buffer with multiple independent readers (non-destructive)."""
+
+    def __init__(self, maxlen=5000):
+        self._buffer = collections.deque(maxlen=maxlen)
+        self._lock = threading.Lock()
+        self._seq = 0
+
+    def push(self, record):
+        with self._lock:
+            self._buffer.append((self._seq, record))
+            self._seq += 1
+
+    def read_since(self, last_seq, limit=50):
+        """Returns (new_seq, [records]) — non-destructive read."""
+        with self._lock:
+            results = [(s, r) for s, r in self._buffer if s > last_seq]
+        entries = results[:limit]
+        new_seq = entries[-1][0] if entries else last_seq
+        return new_seq, [r for _, r in entries]
+
+    @property
+    def latest_seq(self):
+        with self._lock:
+            return self._seq
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# WorkerThread
+# ════════════════════════════════════════════════════════════════════════════
+
 class WorkerThread(threading.Thread):
-    def __init__(self, user, global_config, log_queue, is_scout=False):
+    def __init__(self, user, global_config, log_queue, log_fan_out, semaphore, is_scout=False):
         super().__init__()
         self.user = user
         self.global_config = global_config
         self.log_queue = log_queue
+        self.log_fan_out = log_fan_out
+        self._semaphore = semaphore
         self.running = True
         self.scraper = None
         self.login_fail_count = 0
@@ -28,34 +100,50 @@ class WorkerThread(threading.Thread):
             name=__name__, level=level, pathname="", lineno=0,
             msg=f"{prefix} {message}", args=(), exc_info=None
         )
-        self.log_queue.put(record)
+
+        # P1: Bounded queue — drop oldest if full (ring buffer behavior)
+        try:
+            self.log_queue.put_nowait(record)
+        except queue.Full:
+            try:
+                self.log_queue.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                self.log_queue.put_nowait(record)
+            except queue.Full:
+                pass
+
+        # P3: Non-destructive fan-out for WebSocket consumers
+        self.log_fan_out.push(record)
+
         # Terminale de bas
         logging.log(level, f"{prefix} {message}")
         
-        # Dosyaya özel log yaz (Human readable)
+        # P1: Thread-safe file writing + JSON log rotation
         try:
-            import os, time, json
             log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
             os.makedirs(log_dir, exist_ok=True)
             safe_name = "".join(x for x in self.user.get('first_name', 'user') if x.isalnum() or x.isspace()).replace(" ", "_")
             log_path = os.path.join(log_dir, f"{safe_name}_{self.user.get('id', '0')}.log")
-            
-            time_str = time.strftime("[%Y-%m-%d %H:%M:%S]")
-            with open(log_path, "a", encoding="utf-8") as f:
-                f.write(f"{time_str} {logging.getLevelName(level)} - {message}\n")
-                
-            # Structured JSON Logging (For monitoring tools)
             json_path = os.path.join(log_dir, "telemetry_metrics.json")
-            with open(json_path, "a", encoding="utf-8") as jf:
-                log_data = {
-                    "timestamp": time.time(),
-                    "level": logging.getLevelName(level),
-                    "user_id": self.user.get('id', '0'),
-                    "message": message,
-                    "proxy": self.user.get('proxy_address', 'None')
-                }
-                jf.write(json.dumps(log_data) + "\n")
-        except:
+
+            time_str = time.strftime("[%Y-%m-%d %H:%M:%S]")
+            log_data = {
+                "timestamp": time.time(),
+                "level": logging.getLevelName(level),
+                "user_id": self.user.get('id', '0'),
+                "message": message,
+                "proxy": self.user.get('proxy_address', 'None')
+            }
+
+            with _file_log_lock:
+                _rotate_log_if_needed(json_path)
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write(f"{time_str} {logging.getLevelName(level)} - {message}\n")
+                with open(json_path, "a", encoding="utf-8") as jf:
+                    jf.write(json.dumps(log_data) + "\n")
+        except Exception:
             pass
 
     def _wait(self, seconds):
@@ -70,8 +158,7 @@ class WorkerThread(threading.Thread):
 
     def _is_within_active_hours(self):
         """B5: Aktif saat penceresi kontrolü. Pencere dışındaysa uyutur."""
-        from config.database import get_global_setting
-        active_hours = get_global_setting("active_hours", "").strip()
+        active_hours = GlobalSettingsRepository.get("active_hours", "").strip()
         if not active_hours or '-' not in active_hours:
             return True  # Ayar yoksa 7/24 çalış
         try:
@@ -92,7 +179,14 @@ class WorkerThread(threading.Thread):
         check_interval = int(self.user.get("check_interval", 60))
 
         self._log(logging.INFO, f"Bot başlatılıyor... [Scout Modu: {'Aktif' if self.is_scout else 'Kapalı'}]")
-        update_user_status(user_id, status="Başlatılıyor")
+        UserRepository.update_status(user_id, status="Başlatılıyor")
+
+        # P0: Acquire semaphore slot before launching Chrome
+        acquired = self._semaphore.acquire(timeout=600)  # Wait max 10 min for a slot
+        if not acquired:
+            self._log(logging.WARNING, "⏰ 10 dakika slot bekledikten sonra iptal edildi (max_workers aşıldı).")
+            UserRepository.update_status(user_id, status="Kuyrukta (Limit)", error_msg="Worker limiti doldu")
+            return
 
         try:
             # 0. Scout / Worker Sleep Logic
@@ -105,19 +199,17 @@ class WorkerThread(threading.Thread):
             # Cooldown check
             cooldown_until = self.user.get('cooldown_until')
             if cooldown_until:
-                import datetime
                 try:
                     cd = datetime.datetime.strptime(cooldown_until, "%Y-%m-%d %H:%M:%S")
                     if datetime.datetime.now() < cd:
                         self._log(logging.WARNING, f"Hesap bekleme süresinde (Cooldown). {cd} tarihine kadar işlem yapılamaz.")
-                        update_user_status(user_id, status="Cooldown", error_msg=f"Bekliyor: {cd}")
-                        # Keep thread alive but sleeping deeply, or just exit. Exiting is better for resources.
+                        UserRepository.update_status(user_id, status="Cooldown", error_msg=f"Bekliyor: {cd}")
                         return 
                 except Exception:
                     pass
 
             from bot.proxy_manager import proxy_manager
-            self.scraper = BLSScraper(user_data=self.user, global_config=self.global_config)
+            self.scraper = BLSScraper(user_data=self.user, global_config=self.global_config, log_func=self._log)
             
             # Update user proxy to the sticky one returned by scraper for UI if needed
             if hasattr(self.scraper, 'proxy') and self.scraper.proxy:
@@ -128,7 +220,7 @@ class WorkerThread(threading.Thread):
             
             if not self.scraper.start_driver():
                 self._log(logging.ERROR, "Chrome başlatılamadı.")
-                update_user_status(user_id, status="Hata", error_msg="Chrome başlatılamadı.")
+                UserRepository.update_status(user_id, status="Hata", error_msg="Chrome başlatılamadı.")
                 return
 
             # Ana Döngü
@@ -141,7 +233,7 @@ class WorkerThread(threading.Thread):
                         self.login_fail_count = 0
                         continue
                     
-                    update_user_status(user_id, status="Giriş Yapılıyor")
+                    UserRepository.update_status(user_id, status="Giriş Yapılıyor")
                     email = self.user.get("email", "")
                     from config.database import _decrypt
                     pwd = _decrypt(self.user.get("password_enc", ""))
@@ -152,19 +244,19 @@ class WorkerThread(threading.Thread):
                         self.login_fail_count += 1
                         if self.login_fail_count >= 3:
                             self._log(logging.ERROR, "Üst üste 3 giriş hatası! Hesap 6 saat tatile alınıyor (Risk Engine).")
-                            from config.database import set_user_cooldown
-                            set_user_cooldown(user_id, hours=6)
+                            dt = (datetime.datetime.now() + datetime.timedelta(hours=6)).strftime("%Y-%m-%d %H:%M:%S")
+                            UserRepository.set_cooldown(user_id, dt)
                             return # Exit thread
 
                         self._log(logging.ERROR, "Giriş başarısız. 60 sn sonra tekrar denenecek.")
-                        update_user_status(user_id, status="Giriş Hatası", error_msg="Giriş yapılamadı")
+                        UserRepository.update_status(user_id, status="Giriş Hatası", error_msg="Giriş yapılamadı")
                         self._wait(60)
                         continue
                     else:
                         self.login_fail_count = 0 # Reset on success
 
                 # 2. Randevu Kontrolü
-                update_user_status(user_id, status="Kontrol Ediliyor")
+                UserRepository.update_status(user_id, status="Kontrol Ediliyor")
                 
                 result = self.scraper.check_appointment_availability()
                 
@@ -173,7 +265,7 @@ class WorkerThread(threading.Thread):
                 if result.get("available"):
                     dates_str = ", ".join(result.get("dates", []))
                     self._log(logging.INFO, f"🎉 RANDEVU BULUNDU: {dates_str}")
-                    update_user_status(user_id, status="RANDEVU BULUNDU", last_check=now_str)
+                    UserRepository.update_status(user_id, status="RANDEVU BULUNDU", last_check=now_str)
                     
                     # Notify Dispatcher if Scout
                     if scout_mode_global and self.is_scout:
@@ -191,7 +283,7 @@ class WorkerThread(threading.Thread):
                         book_result = self.scraper.book_appointment(target_slot=target_slot)
                         if book_result:
                             self._log(logging.INFO, "✅✅✅ RANDEVU BAŞARIYLA ALINDI! ✅✅✅")
-                            update_user_status(user_id, status="RANDEVU ALINDI", last_check=now_str)
+                            UserRepository.update_status(user_id, status="RANDEVU ALINDI", last_check=now_str)
                         else:
                             self._log(logging.WARNING, "❌ Otomatik randevu alınamadı (slot kapanmış olabilir).")
                     else:
@@ -203,7 +295,7 @@ class WorkerThread(threading.Thread):
                 else:
                     msg = result.get("message", "")
                     self._log(logging.INFO, f"Randevu yok. Neden: {msg}")
-                    update_user_status(user_id, status="Bekliyor", error_msg=msg, last_check=now_str)
+                    UserRepository.update_status(user_id, status="Bekliyor", error_msg=msg, last_check=now_str)
                     
                     if scout_mode_global and self.is_scout:
                         scout_dispatcher.report_no_date()
@@ -223,7 +315,7 @@ class WorkerThread(threading.Thread):
                 # B5: Aktif saat penceresi kontrolü
                 if not self._is_within_active_hours():
                     self._log(logging.INFO, "🌙 Aktif saatler dışında. Pencere açılana kadar bekleniyor...")
-                    update_user_status(user_id, status="Zaman Dışı")
+                    UserRepository.update_status(user_id, status="Zaman Dışı")
                     while self.running and not self._is_within_active_hours():
                         time.sleep(30)
                     if not self.running: break
@@ -234,38 +326,59 @@ class WorkerThread(threading.Thread):
 
         except Exception as e:
             self._log(logging.ERROR, f"Bot döngüsü çöktü: {e}")
-            update_user_status(user_id, status="Hata", error_msg=str(e)[:50])
+            UserRepository.update_status(user_id, status="Hata", error_msg=str(e)[:50])
         finally:
+            # P0: Always release the semaphore slot when thread exits
+            self._semaphore.release()
             if self.scraper:
                 try:
                     self.scraper.stop_driver()
                 except:
                     pass
-            update_user_status(user_id, status="Durduruldu")
+            UserRepository.update_status(user_id, status="Durduruldu")
             self._log(logging.INFO, "Bot durduruldu.")
 
     def _send_notifications(self, dates_str):
-        """B4: Tüm bildirim kanallarına gönder (Discord + CallMeBot + Telegram Bot Proaktif)"""
+        """B4: Tüm bildirim kanallarına gönder (Discord + Telegram Bot HTTP API)"""
         try:
-            from bot.notifier import DiscordNotifier, CallMeBotNotifier
+            # 1. Discord Webhook
             discord_wh = self.global_config.get("discord_webhook", "")
             if discord_wh:
-                msg = f"🎉 **{self.user.get('first_name')} İçin RANDEVU BULUNDU!**\n📅 Tarihler: {dates_str}"
-                DiscordNotifier(discord_wh).send_message(msg)
-                
-            telegram_user = self.global_config.get("telegram_username", "")
-            telegram_api = self.global_config.get("telegram_apikey", "")
-            if telegram_user and telegram_api:
-                 msg = f"RANDEVU BULUNDU {self.user.get('first_name')} - {dates_str}"
-                 CallMeBotNotifier(telegram_user, telegram_api).send_message(msg)
+                try:
+                    from bot.notifier import DiscordNotifier
+                    msg = f"🎉 **{self.user.get('first_name')} İçin RANDEVU BULUNDU!**\n📅 Tarihler: {dates_str}"
+                    DiscordNotifier(discord_wh).send_message(msg)
+                    self._log(logging.INFO, "📨 Discord bildirimi gönderildi")
+                except Exception as e:
+                    self._log(logging.ERROR, f"Discord bildirim hatası: {e}")
             
-            # B4: Proactive Telegram Bot push (admin'e direkt mesaj)
+            # 2. Telegram Bot — doğrudan HTTP API (daemon bağımsız)
+            bot_token = self.global_config.get("telegram_bot_token", "").strip()
+            admin_ids_raw = self.global_config.get("telegram_admin_id", "").strip()
+            if bot_token and admin_ids_raw:
+                try:
+                    import urllib.request, json as _json
+                    admin_ids = [x.strip() for x in admin_ids_raw.split(",") if x.strip()]
+                    alert_msg = f"🎉 RANDEVU BULUNDU!\n👤 {self.user.get('first_name')} {self.user.get('last_name', '')}\n📅 {dates_str}"
+                    for aid in admin_ids:
+                        try:
+                            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+                            payload = _json.dumps({"chat_id": aid, "text": alert_msg}).encode()
+                            req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+                            urllib.request.urlopen(req, timeout=10)
+                        except Exception as te:
+                            self._log(logging.ERROR, f"Telegram bildirim hatası (ID {aid}): {te}")
+                    self._log(logging.INFO, "📨 Telegram bildirimi gönderildi")
+                except Exception as e:
+                    self._log(logging.ERROR, f"Telegram bildirim hatası: {e}")
+            
+            # 3. Daemon-based fallback (eski yöntem — çalışıyorsa bonus)
             try:
                 from bot.telegram_controller import send_telegram_alert
                 alert_msg = f"🎉 <b>RANDEVU BULUNDU!</b>\n👤 {self.user.get('first_name')} {self.user.get('last_name', '')}\n📅 {dates_str}"
                 send_telegram_alert(alert_msg)
             except Exception:
-                pass  # Telegram bot başlatılmamışsa sessizce geç
+                pass
                 
         except Exception as e:
             self._log(logging.ERROR, f"Bildirim hatası: {e}")
@@ -273,7 +386,7 @@ class WorkerThread(threading.Thread):
     def _wait_for_scout(self, user_id):
         """Worker thread sleeps here until ScoutDispatcher wakes it up"""
         self._log(logging.INFO, "Zzz... İşçi bot uyku modunda. İzcinin randevu bulmasını bekliyor.")
-        update_user_status(user_id, status="Uyku (Scout Bekleniyor)")
+        UserRepository.update_status(user_id, status="Uyku (Scout Bekleniyor)")
         
         while self.running:
             # Wait for event with a timeout so we can still shut down gracefully
@@ -283,82 +396,128 @@ class WorkerThread(threading.Thread):
                 break
 
     def stop(self):
-        self._log(logging.INFO, "Durdurma sinyali alındı. (Mevcut işlem bitince kapanacak)")
+        self._log(logging.INFO, "Durdurma sinyali alındı. Chrome kapatılıyor...")
         self.running = False
+        # Force-kill Chrome immediately — don't wait for the main loop to exit
+        if self.scraper:
+            try:
+                self.scraper.stop_driver()
+            except Exception:
+                pass
 
+
+# ════════════════════════════════════════════════════════════════════════════
+# BotManager — P0: Thread-safe with lock + semaphore cap
+# ════════════════════════════════════════════════════════════════════════════
+
+DEFAULT_MAX_WORKERS = 15
 
 class BotManager:
     def __init__(self, log_queue):
         self.threads = {}
         self.log_queue = log_queue
+        self.log_fan_out = LogFanOut(maxlen=5000)
+        self._lock = threading.Lock()   # P0: Guards self.threads dict
+
+        # P0: Semaphore-based worker cap
+        max_w = int(GlobalSettingsRepository.get("max_workers", str(DEFAULT_MAX_WORKERS)))
+        self._semaphore = threading.Semaphore(max_w)
+        self._max_workers = max_w
+        logger.info(f"🔧 BotManager initialized — max_workers={max_w}")
+
+    def _sys_log(self, level, message):
+        """System-level log entry (not tied to any worker)."""
+        record = logging.LogRecord("", level, "", 0, f"[SİSTEM] {message}", (), None)
+        try:
+            self.log_queue.put_nowait(record)
+        except queue.Full:
+            pass
+        self.log_fan_out.push(record)
+
+    @property
+    def active_worker_count(self):
+        with self._lock:
+            return sum(1 for t in self.threads.values() if t.is_alive())
 
     def start_all(self):
-        users = get_active_users()
-        from config.database import get_global_setting
+        users = UserRepository.get_active()
         global_config = {
-            "2captcha_key": get_global_setting("2captcha_key"),
-            "discord_webhook": get_global_setting("discord_webhook"),
-            "telegram_username": get_global_setting("telegram_username"),
-            "telegram_apikey": get_global_setting("telegram_apikey"),
-            "scout_mode": get_global_setting("scout_mode", "0")
+            "2captcha_key": GlobalSettingsRepository.get("2captcha_key"),
+            "discord_webhook": GlobalSettingsRepository.get("discord_webhook"),
+            "telegram_username": GlobalSettingsRepository.get("telegram_username"),
+            "telegram_apikey": GlobalSettingsRepository.get("telegram_apikey"),
+            "telegram_bot_token": GlobalSettingsRepository.get("telegram_bot_token", ""),
+            "telegram_admin_id": GlobalSettingsRepository.get("telegram_admin_id", ""),
+            "scout_mode": GlobalSettingsRepository.get("scout_mode", "0")
         }
 
         def _staggered_boot():
-            import time
             scout_mode = int(global_config.get("scout_mode", 0)) == 1
                     
             for user in users:
                 uid = user["id"]
-                if uid not in self.threads or not self.threads[uid].is_alive():
-                    # Scout mode is ON globally AND user is explicitly marked as Scout
-                    is_scout = scout_mode and (int(user.get("is_scout", 0)) == 1)
-                    
-                    t = WorkerThread(user, global_config, self.log_queue, is_scout=is_scout)
-                    t.daemon = True
-                    t.start()
+                with self._lock:
+                    already_running = uid in self.threads and self.threads[uid].is_alive()
+                if already_running:
+                    continue
+
+                is_scout = scout_mode and (int(user.get("is_scout", 0)) == 1)
+                
+                t = WorkerThread(user, global_config, self.log_queue, self.log_fan_out, self._semaphore, is_scout=is_scout)
+                t.daemon = True
+                t.start()
+                with self._lock:
                     self.threads[uid] = t
-                    
-                    if not scout_mode or is_scout:
-                        time.sleep(10) # Stagger boot for scouts or normal mode
-                    else:
-                        time.sleep(1) # Fast boot for sleeping workers
+                
+                if not scout_mode or is_scout:
+                    time.sleep(10) # Stagger boot for scouts or normal mode
+                else:
+                    time.sleep(1) # Fast boot for sleeping workers
                     
         # Ana UI'yi kitlememek için ayrı bir Thread oluşturup başlatma döngüsünü ona veriyoruz
         boot_thread = threading.Thread(target=_staggered_boot, daemon=True)
         boot_thread.start()
 
     def stop_all(self):
-        for uid, t in self.threads.items():
+        with self._lock:
+            threads_snapshot = dict(self.threads)
+            self.threads.clear()
+        for uid, t in threads_snapshot.items():
             t.stop()
-        self.threads.clear()
-        self.log_queue.put(logging.LogRecord("", logging.INFO, "", 0, "[SİSTEM] Temizlik sinyali gönderildi. Tüm botlar (chrome.exe) kendi içinde güvenle kapatılıyor...", (), None))
+        self._sys_log(logging.INFO, "Temizlik sinyali gönderildi. Tüm botlar (chrome.exe) kendi içinde güvenle kapatılıyor...")
         
     def stop_user(self, user_id):
-        if user_id in self.threads:
-             self.threads[user_id].stop()
-             del self.threads[user_id]
+        with self._lock:
+            t = self.threads.pop(user_id, None)
+        if t:
+            t.stop()
              
     def start_single(self, user_id):
-        from config.database import get_user_by_id, get_global_setting
-        user = get_user_by_id(user_id)
+        user = UserRepository.get_by_id(user_id)
         if not user or not user.get('is_active'):
-            self.log_queue.put(logging.LogRecord("", logging.WARNING, "", 0, f"[SİSTEM] Müşteri ID {user_id} bulunamadı veya pasif durumda.", (), None))
+            self._sys_log(logging.WARNING, f"Müşteri ID {user_id} bulunamadı veya pasif durumda.")
             return
             
         global_config = {
-            "2captcha_key": get_global_setting("2captcha_key"),
-            "discord_webhook": get_global_setting("discord_webhook"),
-            "telegram_username": get_global_setting("telegram_username"),
-            "telegram_apikey": get_global_setting("telegram_apikey"),
-            "scout_mode": get_global_setting("scout_mode")
+            "2captcha_key": GlobalSettingsRepository.get("2captcha_key"),
+            "discord_webhook": GlobalSettingsRepository.get("discord_webhook"),
+            "telegram_username": GlobalSettingsRepository.get("telegram_username"),
+            "telegram_apikey": GlobalSettingsRepository.get("telegram_apikey"),
+            "scout_mode": GlobalSettingsRepository.get("scout_mode")
         }
         
-        if user_id not in self.threads or not self.threads[user_id].is_alive():
-            scout_mode = int(global_config.get("scout_mode", 0)) == 1
-            is_scout = scout_mode and (int(user.get("is_scout", 0)) == 1)
-            
-            t = WorkerThread(user, global_config, self.log_queue, is_scout=is_scout)
-            t.daemon = True
-            t.start()
+        with self._lock:
+            already_running = user_id in self.threads and self.threads[user_id].is_alive()
+        if already_running:
+            self._sys_log(logging.WARNING, f"Müşteri ID {user_id} zaten çalışıyor.")
+            return
+
+        scout_mode = int(global_config.get("scout_mode", 0)) == 1
+        is_scout = scout_mode and (int(user.get("is_scout", 0)) == 1)
+        
+        t = WorkerThread(user, global_config, self.log_queue, self.log_fan_out, self._semaphore, is_scout=is_scout)
+        t.daemon = True
+        t.start()
+        with self._lock:
             self.threads[user_id] = t
-            self.log_queue.put(logging.LogRecord("", logging.INFO, "", 0, f"[SİSTEM] Müşteri ID {user_id} (Manuel/Harici) başlatıldı.", (), None))
+        self._sys_log(logging.INFO, f"Müşteri ID {user_id} (Manuel/Harici) başlatıldı.")

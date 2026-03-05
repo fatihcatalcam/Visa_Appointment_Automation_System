@@ -25,12 +25,12 @@ METRIC_PAGE_LOAD_LATENCY = Histogram('bot_page_load_latency_seconds', 'Page load
 def _poll_gauges_loop():
     """Periodically queries the true state of the system and updates Gauges."""
     from config.cache import redis_manager
-    from config.database import get_all_users
+    from data.repositories import UserRepository
     
     while True:
         try:
             # 1. Update Quarantined Accounts from DB
-            users = get_all_users()
+            users = UserRepository.get_all()
             cooldowns = sum(1 for u in users if u.get("status") == "Cooldown")
             active = sum(1 for u in users if u.get("status") not in ["Idle", "Durduruldu", "Hata", "Giriş Hatası", "Cooldown"])
             

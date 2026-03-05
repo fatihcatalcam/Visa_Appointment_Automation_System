@@ -31,7 +31,7 @@ class TestT6_RedisFallback:
         ]
 
         with patch("bot.proxy_manager.redis_manager", mock_rm), \
-             patch("bot.proxy_manager.get_all_proxies", return_value=sqlite_proxies):
+             patch("bot.proxy_manager.ProxyRepository.get_all", return_value=sqlite_proxies):
             from bot.proxy_manager import ProxyManager
             pm = ProxyManager.__new__(ProxyManager)
             pm.proxies = sqlite_proxies
@@ -48,7 +48,7 @@ class TestT6_RedisFallback:
         mock_rm.get_client.return_value = None
 
         with patch("bot.proxy_manager.redis_manager", mock_rm), \
-             patch("bot.proxy_manager.update_proxy_stats"):
+             patch("bot.proxy_manager.ProxyRepository.update_proxy_status"):
             from bot.proxy_manager import ProxyManager
             pm = ProxyManager.__new__(ProxyManager)
             pm._lua_proxy_fail = None

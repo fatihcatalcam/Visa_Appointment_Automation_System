@@ -16,7 +16,7 @@ class DashboardWindow(ctk.CTk):
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
         
-        self.log_queue = queue.Queue()
+        self.log_queue = queue.Queue(maxsize=10000)
         self.manager = BotManager(self.log_queue)
         
         self._build_ui()
@@ -249,23 +249,7 @@ class DashboardWindow(ctk.CTk):
     def _start_single(self):
         uid = self._get_selected_user_id()
         if uid:
-            user = get_user_by_id(uid)
-            if user:
-                # Fake a global config to pass to start_single logic
-                from config.database import get_global_setting
-                global_config = {
-                    "2captcha_key": get_global_setting("2captcha_key"),
-                    "discord_webhook": get_global_setting("discord_webhook"),
-                    "telegram_username": get_global_setting("telegram_username"),
-                    "telegram_apikey": get_global_setting("telegram_apikey")
-                }
-                
-                if uid not in self.manager.threads or not self.manager.threads[uid].is_alive():
-                    from bot.manager import WorkerThread
-                    t = WorkerThread(user, global_config, self.log_queue)
-                    t.daemon = True
-                    t.start()
-                    self.manager.threads[uid] = t
+            self.manager.start_single(uid)
 
     def _stop_single(self):
         uid = self._get_selected_user_id()

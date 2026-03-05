@@ -100,7 +100,7 @@ class TestT2_PoolExhaustion:
         # ActiveList is empty (no SADD called)
 
         with patch("bot.proxy_manager.redis_manager", mock_rm), \
-             patch("bot.proxy_manager.get_all_proxies", return_value=[]):
+             patch("bot.proxy_manager.ProxyRepository.get_all", return_value=[]):
             from bot.proxy_manager import ProxyManager
             pm = ProxyManager.__new__(ProxyManager)
             pm.proxies = []
@@ -202,7 +202,7 @@ class TestT4_CooldownReactivation:
         mock_rm.get_client.return_value = redis_client
 
         with patch("bot.proxy_manager.redis_manager", mock_rm), \
-             patch("bot.proxy_manager.get_all_proxies", return_value=[]):
+             patch("bot.proxy_manager.ProxyRepository.get_all", return_value=[]):
             from bot.proxy_manager import ProxyManager
             pm = ProxyManager.__new__(ProxyManager)
             pm.proxies = []

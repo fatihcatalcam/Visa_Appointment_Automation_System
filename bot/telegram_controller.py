@@ -3,7 +3,7 @@ import threading
 import logging
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from config.database import get_global_setting, get_all_users
+from data.repositories import GlobalSettingsRepository, UserRepository
 
 # Telegram'ın (httpx) HTTP isteklerini log ekranına basmasını engelle
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -14,7 +14,7 @@ class TelegramBotDaemon(threading.Thread):
         super().__init__()
         self.bot_manager = bot_manager
         self.daemon = True
-        self.token = get_global_setting("telegram_bot_token", "").strip()
+        self.token = GlobalSettingsRepository.get("telegram_bot_token", "").strip()
         self.allowed_users = self._parse_allowed_users()
         self.application = None
         self.loop = asyncio.new_event_loop()
@@ -24,7 +24,7 @@ class TelegramBotDaemon(threading.Thread):
         # or accept commands if we want to restrict it.
         # Actually it's safer to only allow the owner. We'll use the 'telegram_username' as an ID check if needed
         # but telegram IDs are numeric. Let's create a setting for it.
-        admin_id = get_global_setting("telegram_admin_id", "").strip()
+        admin_id = GlobalSettingsRepository.get("telegram_admin_id", "").strip()
         if admin_id:
             try:
                 return [int(x) for x in admin_id.split(",")]
@@ -108,7 +108,7 @@ class TelegramBotDaemon(threading.Thread):
             await update.message.reply_text("⛔ Yetkiniz yok.")
             return
             
-        users = get_all_users()
+        users = UserRepository.get_all()
         active_count = 0
         running_count = 0
         error_count = 0

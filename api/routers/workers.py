@@ -151,7 +151,7 @@ def export_excel():
     df = pd.DataFrame(export_data)
     cols = ["id", "is_active", "email", "password", "first_name", "last_name", "phone", 
             "jurisdiction", "location", "category", "visa_type", "visa_sub_type", 
-            "appointment_for", "minimum_days", "check_interval", "proxy_address", "status", "last_check", "error_msg", "cooldown_until"]
+            "appointment_for", "minimum_days", "check_interval", "proxy_address", "status", "last_check", "error_msg", "cooldown_until", "email_app_password"]
     cols = [c for c in cols if c in df.columns]
     df = df[cols]
     

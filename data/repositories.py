@@ -13,7 +13,12 @@ class UserRepository:
         try:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute("SELECT * FROM users")
-                return [dict(row) for row in cur.fetchall()]
+                users = [dict(row) for row in cur.fetchall()]
+                for u in users:
+                    if u.get('email_app_password'):
+                        try: u['email_app_password'] = _decrypt(u['email_app_password'])
+                        except: pass
+                return users
         finally:
             db.release_connection(conn)
 
@@ -23,7 +28,12 @@ class UserRepository:
         try:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute("SELECT * FROM users WHERE is_active=TRUE")
-                return [dict(row) for row in cur.fetchall()]
+                users = [dict(row) for row in cur.fetchall()]
+                for u in users:
+                    if u.get('email_app_password'):
+                        try: u['email_app_password'] = _decrypt(u['email_app_password'])
+                        except: pass
+                return users
         finally:
             db.release_connection(conn)
 
@@ -34,7 +44,13 @@ class UserRepository:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute("SELECT * FROM users WHERE id=%s", (user_id,))
                 row = cur.fetchone()
-                return dict(row) if row else None
+                if row:
+                    user_dict = dict(row)
+                    if user_dict.get('email_app_password'):
+                        try: user_dict['email_app_password'] = _decrypt(user_dict['email_app_password'])
+                        except: pass
+                    return user_dict
+                return None
         finally:
             db.release_connection(conn)
 

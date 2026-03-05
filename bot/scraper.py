@@ -2067,13 +2067,16 @@ class BLSScraper:
                     time.sleep(1)
 
                     # Photo Upload Bölümü
+                    # ⚠️ ROOT CAUSE FIX: _find_element_multi() gizli elementleri ATLAR (is_displayed() kontrolü)!
+                    # Kendo UI file input'u GİZLİ olduğu için _find_element_multi HER ZAMAN None döndürüyor
+                    # ve tüm Base64 injection bloğu sessizce ES GEÇİLİYOR.
+                    # Çözüm: Element varlığını doğrudan JavaScript ile kontrol et, visibility önemsiz.
                     self._log(logging.INFO, "  Stock vesikalık fotoğraf yükleniyor...")
-                    file_input = self._find_element_multi([
-                        (By.ID, "PassportCopy"),
-                        (By.XPATH, "//input[@type='file']")
-                    ], timeout=3)
+                    has_file_input = self.driver.execute_script("""
+                        return !!(document.getElementById('uploadfile-1') || document.getElementById('PassportCopy') || document.querySelector("input[type='file']"));
+                    """)
                     
-                    if file_input:
+                    if has_file_input:
                         stock_photo_path = os.path.join(os.getcwd(), "test_photo.jpg")
                         
                         # Kullanıcının 200KB altı, tam siyah düzgün bir fotoğraf talebi (Pillow ile)
@@ -2085,78 +2088,100 @@ class BLSScraper:
                         except Exception as e:
                             self._log(logging.WARNING, f"  [APPLICANT] Siyah fotoğraf üretilirken hata: {e}")
 
-                        # Dosyayı input'a gönder (Standart Selenium + JS DataTransfer Garanti)
+                        # DİKKAT: Selenium hidden inputlarda ve Kendo UI'da patlıyor. 
+                        # Subagent'ın canlı yayında çözdüğü "Pure Javascript + Base64 DataTransfer" bypass yöntemini kullanacağız.
+                        self._log(logging.INFO, f"  [APPLICANT] Selenium es geçiliyor. Base64 JS Injection ile fotoğraf yükleniyor...")
+                        
                         try:
-                            file_input.send_keys(stock_photo_path)
-                        except Exception as e:
-                            self._log(logging.WARNING, f"  [APPLICANT] Standart photo injection başarısız, JavaScript ile denenecek: {e}")
+                            import base64
+                            with open(stock_photo_path, "rb") as f:
+                                base64_data = base64.b64encode(f.read()).decode('utf-8')
+                                
+                            js_upload_trigger = """
+                                const base64Content = arguments[0];
+                                const fileName = "test_photo.jpg";
+                                const mimeType = "image/jpeg";
+
+                                function base64ToBlob(base64, type) {
+                                    const binStr = atob(base64);
+                                    const len = binStr.length;
+                                    const arr = new Uint8Array(len);
+                                    for (let i = 0; i < len; i++) {
+                                        arr[i] = binStr.charCodeAt(i);
+                                    }
+                                    return new Blob([arr], { type: type });
+                                }
+
+                                const blob = base64ToBlob(base64Content, mimeType);
+                                const file = new File([blob], fileName, { type: mimeType });
+                                const container = new DataTransfer();
+                                container.items.add(file);
+                                
+                                const input = document.getElementById('uploadfile-1');
+                                if (!input) {
+                                    return "ERROR: Input #uploadfile-1 not found";
+                                }
+                                
+                                // Inject the file into the input
+                                input.files = container.files;
+                                
+                                // Explicitly trigger the site's upload logic
+                                if (typeof onFileChange === 'function') {
+                                    onFileChange();
+                                } else {
+                                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                                }
+                                return "INJECTED";
+                            """
                             
-                        # SUBAGENT FIX: Kendo UI file input'u change eventi istiyor
-                        js_upload_trigger = """
-                            var fileInput = document.getElementById('uploadfile-1') || document.querySelector("input[type='file']");
-                            if(fileInput) {
-                                // Event fırlatarak frontend validation'ı tetikle
-                                fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-                            }
-                        """
-                        self.driver.execute_script(js_upload_trigger)
-                        
-                        self._log(logging.INFO, f"  Fotoğraf başarıyla sisteme verildi: {stock_photo_path}")
-                        time.sleep(1)
-                        
-                        # Upload Trigger button (Kendo UI Upload modülleri için genişletildi)
-                        btn_upload = self._find_element_multi([
-                            (By.ID, "btnUpload"),
-                            (By.ID, "btnUploadPhoto"),
-                            (By.XPATH, "//label[contains(@class, 'upload-photo-btn')]"), # Subagent uyarısı
-                            (By.XPATH, "//input[@value='Upload']"),
-                            (By.XPATH, "//button[contains(text(), 'Upload') or contains(text(), 'Yükle')]"),
-                            (By.XPATH, "//button[contains(@class, 'k-upload-selected') or contains(@class, 'k-button')]//span[contains(text(), 'Upload') or contains(text(), 'Yükle')]")
-                        ], timeout=2)
-                        
-                        if btn_upload:
-                            self._log(logging.INFO, "  [APPLICANT] Fotoğraf 'Upload/Yükle' butonuna basılıyor.")
-                            # Kendo UI upload butonlarına tıklarken hem JS hem DOM click deneyelim
-                            try: btn_upload.click()
-                            except: pass
-                            self.driver.execute_script("try{arguments[0].click();}catch(e){}", btn_upload)
-                            time.sleep(1.5)
+                            inject_result = self.driver.execute_script(js_upload_trigger, base64_data)
+                            self._log(logging.INFO, f"  [APPLICANT] JS Injection Sonucu: {inject_result}")
                             
-                            # YENİ EKLENEN: Başarılı yükleme sonrası çıkan "Confirm Photo" dialogundaki "Understood" butonunu geçme
-                            self._log(logging.INFO, "  [APPLICANT] 'Confirm Photo' onay pop-up'ı bekleniyor...")
+                            # Yükleme sonrası "Confirm Photo" pop-up'ını yakalama ve Onaylama
+                            self._log(logging.INFO, "  [APPLICANT] 'Confirm Photo' onay pop-up'ı bekleniyor ve 'Understood' tıklanıyor...")
+                            time.sleep(2) # AJAX POST'un tamamlanması için kısa bekleme
                             
-                            # Subagent tespiti: global-overlay-loader isimli bir loading ekranı tıklamaları engelleyebiliyor.
-                            time.sleep(1.5)
-                            
-                            btn_understood = self._find_element_multi([
-                                (By.XPATH, "//div[@id='photoUploadModal']//button[@onclick='return OnPhotoAccepted();']"),
-                                (By.XPATH, "//div[@id='photoUploadModal']//button[contains(text(), 'Understood') or contains(text(), 'Anladım')]")
-                            ], timeout=3)
-                            
-                            if btn_understood:
-                                self._log(logging.INFO, "  [APPLICANT] 'Understood' butonuna tıklanıyor.")
-                                try: btn_understood.click()
-                                except: self.driver.execute_script("arguments[0].click();", btn_understood)
-                                time.sleep(1)
-                            else:
-                                # JS garantisi - Subagent'ın önerdiği kesin selector
-                                self.driver.execute_script("""
-                                    var btn = document.querySelector("#photoUploadModal button[onclick*='OnPhotoAccepted']");
-                                    if(btn) { btn.click(); }
-                                    else {
-                                        var btns = document.querySelectorAll('#photoUploadModal button');
-                                        for(var i=0; i<btns.length; i++) {
-                                            if(btns[i].innerText.toLowerCase().includes('understood') || btns[i].innerText.toLowerCase().includes('anladım')) {
-                                                btns[i].click();
-                                                break;
-                                            }
+                            js_confirm_photo = """
+                                // Callback tetikle
+                                if (typeof OnPhotoAccepted === 'function') {
+                                    OnPhotoAccepted();
+                                }
+                                
+                                // Butona da basalım garanti olsun
+                                var btn = document.querySelector("#photoUploadModal button[onclick*='OnPhotoAccepted']");
+                                if(btn) { btn.click(); }
+                                else {
+                                    var btns = document.querySelectorAll('#photoUploadModal button');
+                                    for(var i=0; i<btns.length; i++) {
+                                        if(btns[i].innerText.toLowerCase().includes('understood') || btns[i].innerText.toLowerCase().includes('anladım')) {
+                                            btns[i].click();
+                                            break;
                                         }
                                     }
-                                """)
-                                time.sleep(1)
+                                }
                                 
-                        # Bazı durumlarda ekstra doğrulama veya popup çıkabiliyor, bu basit bekleme onu sindirmek içindir.
-                        time.sleep(1)
+                                // Modal kapatmayı zorla
+                                if (typeof $ !== 'undefined' && $('#photoUploadModal').length) {
+                                    try { $('#photoUploadModal').modal('hide'); } catch(e) {}
+                                    $('#photoUploadModal').removeClass('show').css('display', 'none');
+                                    $('.modal-backdrop').remove();
+                                    $('body').removeClass('modal-open').css('padding-right', '');
+                                }
+                                
+                                // Final check: id gelmiş mi?
+                                return document.getElementById('ApplicantPhotoId') ? document.getElementById('ApplicantPhotoId').value : null;
+                            """
+                            
+                            photo_id = self.driver.execute_script(js_confirm_photo)
+                            self._log(logging.INFO, f"  [APPLICANT] Fotoğraf onayı tamamlandı. Sistemdeki Photo ID'si: {photo_id or 'Okunamadı'}")
+                            
+                        except Exception as e:
+                            self._log(logging.ERROR, f"  [APPLICANT] JS Injection kritik hata: {e}")
+                            
+                        # AJAX'ın dinlenmesi için biraz daha süre
+                        time.sleep(2)
+                    else:
+                        self._log(logging.WARNING, "  [APPLICANT] ⚠️ Sayfada hiçbir file input bulunamadı! Fotoğraf yükleme ATLANIYOR.")
                     
                     # OTP Talebi ve Okunması
                     try:
@@ -2255,14 +2280,24 @@ class BLSScraper:
                         self._log(logging.WARNING, f"  [OTP] Hatası: {otp_e}")
 
                     # Final Devam/Submit (Applicant Selection)
-                    btn_submit = self._find_element_multi([
-                        (By.ID, "btnSubmit"),
-                        (By.TAG_NAME, "button")
-                    ])
-                    if btn_submit:
-                        self._log(logging.INFO, "  >> Submit/Proceed (Applicant Selection) butonuna basılıyor.")
-                        self.driver.execute_script("arguments[0].click();", btn_submit)
-                        time.sleep(5)
+                    self._log(logging.INFO, "  >> Submit/Proceed (Applicant Selection) butonuna basılıyor.")
+                    
+                    # Element is not clickable at point (overlay) hatasını önlemek için %100 Javascript kullanıyoruz:
+                    js_final_submit = """
+                        var submitBtn = document.getElementById('btnSubmit') || document.querySelector('input[value="Submit"]') || document.querySelector('button[type="submit"]');
+                        if(submitBtn) {
+                            submitBtn.scrollIntoView({block: 'center', behavior: 'instant'});
+                            submitBtn.click();
+                            return true;
+                        }
+                        return false;
+                    """
+                    success_submit = self.driver.execute_script(js_final_submit)
+                    if not success_submit:
+                        self._log(logging.WARNING, "  [APPLICANT] Submit butonu bulunamadı, form direkt post ediliyor...")
+                        self.driver.execute_script("try{ document.forms[0].submit(); }catch(e){}")
+                        
+                    time.sleep(5)
                 except Exception as ex:
                     self._log(logging.ERROR, f"  Applicant Selection adımında hata: {ex}")
                     return False

@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from api.routers import workers, proxies, system
+from api.auth import verify_api_key
 import logging
 
 logger = logging.getLogger(__name__)
@@ -29,13 +30,19 @@ app = FastAPI(
     title="SaaS Bot Control API",
     description="Headless backend API for managing workers over VPS.",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    dependencies=[Depends(verify_api_key)],
 )
 
-# CORS configuration - Allow modern web dash to hit the API
+# CORS configuration - Restricted to local dev server origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # For production this should be restricted to the real domains
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

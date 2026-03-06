@@ -275,6 +275,7 @@ class WorkerThread(threading.Thread):
                     self._send_notifications(dates_str)
                     
                     # B1: Oto-Randevu Alma
+                    book_result = False
                     auto_book = int(self.user.get('auto_book', 0)) == 1
                     if auto_book:
                         self._log(logging.INFO, "📌 Otomatik randevu alma başlatılıyor...")
@@ -330,8 +331,17 @@ class WorkerThread(threading.Thread):
                 self._wait(wait)
 
         except Exception as e:
-            self._log(logging.ERROR, f"Bot döngüsü çöktü: {e}")
-            UserRepository.update_status(user_id, status="Hata", error_msg=str(e)[:50])
+            from bot.error_classifier import classify_error, get_weight, get_backoff
+            error_type = classify_error(exception=e)
+            weight = get_weight(error_type)
+            self._log(logging.ERROR, f"Bot döngüsü çöktü [{error_type}]: {e}")
+            UserRepository.update_status(user_id, status="Hata", error_msg=f"[{error_type}] {str(e)[:40]}")
+            # Apply classified risk penalty
+            if weight.account_risk_points > 0:
+                from config.database import report_account_risk
+                report_account_risk(user_id, weight.account_risk_points, reason=f"Worker crash: {error_type}")
+            if weight.proxy_fails > 0 and self.scraper and self.scraper.proxy:
+                proxy_manager.report_failure(self.scraper.proxy, error_type=weight.proxy_error_type)
         finally:
             # P0: Always release the semaphore slot when thread exits
             self._semaphore.release()
@@ -428,6 +438,25 @@ class BotManager:
         max_w = int(GlobalSettingsRepository.get("max_workers", str(DEFAULT_MAX_WORKERS)))
         self._semaphore = threading.Semaphore(max_w)
         self._max_workers = max_w
+
+        # FIX: Attach a handler to the root logger so ALL logging.info/warning/error
+        # calls system-wide are forwarded to log_fan_out → WebSocket → web panel.
+        # Without this, only WorkerThread._log() and BotManager._sys_log() reached
+        # log_fan_out, leaving the web panel "System Logs" empty.
+        class _FanOutHandler(logging.Handler):
+            """Bridges Python logging to LogFanOut for WebSocket consumers."""
+            def __init__(self, fan_out):
+                super().__init__()
+                self._fan_out = fan_out
+            def emit(self, record):
+                self._fan_out.push(record)
+
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.INFO)
+        # Guard against duplicate handler registration (hot-reload / multiple instances)
+        if not any(isinstance(h, _FanOutHandler) for h in root_logger.handlers):
+            root_logger.addHandler(_FanOutHandler(self.log_fan_out))
+
         logger.info(f"🔧 BotManager initialized — max_workers={max_w}")
 
     def _sys_log(self, level, message):

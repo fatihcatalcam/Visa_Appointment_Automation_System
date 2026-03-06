@@ -32,10 +32,19 @@ env/
 logs/
 
 # ========================
+# Güvenlik / Secrets
+# ========================
+data/.secret_key
+data/sessions/
+*.xlsx
+
+# ========================
 # Geçici / Test Dosyaları
 # ========================
 test_photo.jpg
 last_captcha_grid.png
+backend.log
+backend_error.log
 
 # ========================
 # IDE / Editör

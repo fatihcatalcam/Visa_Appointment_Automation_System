@@ -238,9 +238,9 @@ class ProxyManager:
                 r.hincrby(key, "fail_count", 1)
                 r.hincrby(key, "consecutive_fails", 1)
 
-        def _bg_fail():
+        def _bg_fail(was_disabled=bool(disabled) if 'disabled' in dir() else False):
             # If it was disabled by Lua, pass that to Postgres
-            if 'disabled' in locals() and disabled:
+            if was_disabled:
                 dt = (datetime.datetime.now() + datetime.timedelta(seconds=1800)).strftime("%Y-%m-%d %H:%M:%S")
                 ProxyRepository.update_proxy_status(address, "Disabled", fail_increment=1, consecutive_fails=5, disabled_until=dt)
             else:

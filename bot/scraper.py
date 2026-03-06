@@ -1,6 +1,7 @@
-﻿"""
-BLS Spain Visa Bot - Scraper Module
-Selenium tabanlı web scraping ve otomasyon motoru
+"""
+BLS Spain Visa Bot - Scraper Orchestrator
+Delegates browser lifecycle to BrowserFactory and auth to LoginManager.
+Retains form filling, date scanning, and booking logic.
 """
 import os
 import time
@@ -22,12 +23,18 @@ from bot.telemetry import (
     METRIC_LOGIN_ATTEMPTS, METRIC_CAPTCHAS_ENCOUNTERED, 
     METRIC_403_ERRORS, METRIC_PAGE_LOAD_LATENCY, METRIC_BOOKING_SUCCESS
 )
+from bot.browser import BrowserFactory
+from bot.login_manager import LoginManager
+
 logger = logging.getLogger(__name__)
+
+
 class BLSScraper:
-    """BLS Spain Visa sitesi için Selenium scraper"""
+    """BLS Spain Visa scraper — thin orchestrator delegating to focused modules."""
     LOGIN_URL = "https://turkey.blsspainglobal.com/Global/account/login"
     REGISTER_URL = "https://turkey.blsspainglobal.com/Global/account/register"
     APPOINTMENT_URL = "https://turkey.blsspainglobal.com/Global/appointment/newappointment"
+
     def __init__(self, user_data: dict, global_config: dict = None, log_func=None):
         self.user_data = user_data
         self.config = global_config or {}
@@ -35,11 +42,8 @@ class BLSScraper:
         self._custom_log = log_func
         
         # Determine Proxy via ProxyManager
-        # First check if the user has a hardcoded proxy, or if it was assigned dynamically
         assigned_proxy = self.user_data.get('proxy_address', "").strip()
         self.proxy = proxy_manager.get_proxy(assigned_proxy=assigned_proxy)
-        
-        # If proxy manager gave us a proxy, update the user data so it sticks (Sticky Session)
         if self.proxy:
             self.user_data['proxy_address'] = self.proxy
             
@@ -47,593 +51,95 @@ class BLSScraper:
         self.wait = None
         self.is_logged_in = False
         
-        # B2: Cookie session path
-        self._session_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'sessions')
-        self._session_file = os.path.join(self._session_dir, f"{self.user_data.get('id', 0)}.json")
+        # Composition: delegate browser and login to extracted modules
+        self._browser = BrowserFactory(user_data, self.config, log_func)
+        self._browser.proxy = self.proxy
+        self._login_mgr = LoginManager(user_data, self.config, log_func)
+
     def _log(self, level, msg):
         if self._custom_log:
             self._custom_log(level, msg)
         else:
             logger.log(level, f"[{self.user_data.get('first_name', 'Bilinmiyor')}] {msg}")
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Browser Lifecycle — delegated to BrowserFactory
+    # ═══════════════════════════════════════════════════════════════════════
+
     def _generate_fingerprint(self):
-        """Generates a consistent, semi-random fingerprint based on user_id"""
-        import random
-        # Seed the random generator with user_id so it always produces the same output for this user
-        uid_str = str(self.user_data.get('id', '0'))
-        random.seed(uid_str)
-        
-        # Pick a random but realistic Chrome version (e.g. 118-121)
-        major_version = random.randint(118, 122)
-        minor = random.randint(0, 9)
-        build = random.randint(1000, 6000)
-        patch = random.randint(0, 150)
-        
-        os_options = [
-            "Windows NT 10.0; Win64; x64",
-            "Windows NT 11.0; Win64; x64"
-        ]
-        os_ver = random.choice(os_options)
-        
-        ua = f"Mozilla/5.0 ({os_ver}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{major_version}.0.{build}.{patch} Safari/537.36"
-        
-        # Window sizes
-        resolutions = ["1280,900", "1366,768", "1440,900", "1600,900", "1920,1080"]
-        res = random.choice(resolutions)
-        
-        return ua, res
+        return self._browser.generate_fingerprint()
+
     def start_driver(self):
-        """Chrome WebDriver'ı başlat"""
-        try:
-            ua, res = self._generate_fingerprint()
-            
-            if self.headless:
-                self._log(logging.INFO, f"Gizli (Stealth Headless) modda başlatılıyor... [UA: Chrome {ua.split('Chrome/')[1].split(' ')[0]}]")
-                import undetected_chromedriver as uc
-                import re
-                
-                max_retries = 3
-                
-                # Proactively detect installed Chrome version to avoid mismatch
-                version_main = None
-                try:
-                    import subprocess
-                    reg_result = subprocess.run(
-                        ['reg', 'query', r'HKEY_CURRENT_USER\Software\Google\Chrome\BLBeacon', '/v', 'version'],
-                        capture_output=True, text=True, timeout=5
-                    )
-                    match = re.search(r'(\d+)\.', reg_result.stdout)
-                    if match:
-                        version_main = int(match.group(1))
-                        self._log(logging.INFO, f"Chrome v{version_main} algılandı, uyumlu driver kullanılacak.")
-                except Exception:
-                    pass
-                
-                for attempt in range(max_retries):
-                    options = uc.ChromeOptions()
-                    options.add_argument("--no-sandbox")
-                    options.add_argument("--disable-dev-shm-usage")
-                    options.add_argument(f"--window-size={res}")
-                    options.add_argument("--disable-extensions")
-                    options.add_argument("--disable-background-networking")
-                    options.add_argument("--disable-default-apps")
-                    options.add_argument("--mute-audio")
-                    options.add_argument("--js-flags=--max-old-space-size=256")
-                    
-                    if self.proxy:
-                        if "@" in self.proxy:
-                            from bot.proxy_auth import create_proxy_extension
-                            ext_path = create_proxy_extension(self.proxy)
-                            if ext_path:
-                                options.add_extension(ext_path)
-                                if attempt == 0: self._log(logging.INFO, "Auth-Proxy Eklentisi Yüklendi.")
-                        else:
-                            options.add_argument(f"--proxy-server={self.proxy}")
-                            if attempt == 0: self._log(logging.INFO, f"Proxy Aktif: {self.proxy}")
-                    
-                    options.add_argument(f"user-agent={ua}")
-                    options.add_argument("--disable-gpu")
-                    options.add_argument("--enable-javascript")
-                    
-                    try:
-                        kwargs = {"options": options, "headless": True, "use_subprocess": True}
-                        if version_main:
-                            kwargs["version_main"] = version_main
-                            
-                        self.driver = uc.Chrome(**kwargs)
-                        break
-                    except Exception as try_err:
-                        if attempt == max_retries - 1:
-                            raise try_err
-                        
-                        err_str = str(try_err)
-                        match = re.search(r"Current browser version is (\d+)", err_str)
-                        if match:
-                            version_main = int(match.group(1))
-                            self._log(logging.INFO, f"Driver version mismatch. Forcing version_main={version_main}, clearing cache...")
-                            # Clear stale cached chromedriver to force fresh download
-                            import shutil, pathlib
-                            cache_dir = pathlib.Path.home() / "appdata" / "roaming" / "undetected_chromedriver"
-                            if cache_dir.exists():
-                                shutil.rmtree(cache_dir, ignore_errors=True)
-                            
-                        self._log(logging.WARNING, f"Headless tarayıcı çöktü, tekrar deneniyor ({attempt+1}/{max_retries}): {try_err}")
-                        time.sleep(2)
-            else:
-                self._log(logging.INFO, f"Normal (Görünür) Chrome başlatılıyor... [UA: Chrome {ua.split('Chrome/')[1].split(' ')[0]}]")
-                options = Options()
-                options.add_argument("--no-sandbox")
-                options.add_argument("--disable-dev-shm-usage")
-                options.add_argument("--disable-blink-features=AutomationControlled")
-                if self.proxy:
-                    if "@" in self.proxy:
-                        from bot.proxy_auth import create_proxy_extension
-                        ext_path = create_proxy_extension(self.proxy)
-                        if ext_path:
-                            options.add_extension(ext_path)
-                            self._log(logging.INFO, "Auth-Proxy Eklentisi Yüklendi.")
-                    else:
-                        options.add_argument(f"--proxy-server={self.proxy}")
-                        self._log(logging.INFO, f"Proxy Aktif: {self.proxy}")
-                options.add_experimental_option("excludeSwitches", ["enable-automation"])
-                options.add_experimental_option("useAutomationExtension", False)
-                options.add_argument(f"--window-size={res}")
-                options.add_argument(f"user-agent={ua}")
-                
-                # Selenium Manager (4.6+) doğru sürücüyü otomatik bulur
-                self.driver = webdriver.Chrome(options=options)
-            
-            self.driver.execute_script(
-                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-            )
-            # Add dynamic screen size overriding based on user logic to bypass basic detection
-            width, height = res.split(',')
-            self.driver.execute_script(f"""
-                Object.defineProperty(window.screen, 'width', {{get: () => {width}}});
-                Object.defineProperty(window.screen, 'height', {{get: () => {height}}});
-            """)
-            
-            # Selenium Stealth Entegrasyonu
-            try:
-                from selenium_stealth import stealth
-                vendor = random.choice(["Google Inc.", "Apple Computer, Inc."])
-                renderer = random.choice(["Intel Iris OpenGL Engine", "AMD Radeon Pro 5300M OpenGL Engine", "ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0)"])
-                
-                stealth(self.driver,
-                        languages=["tr-TR", "tr", "en-US", "en"],
-                        vendor=vendor,
-                        platform="Win32",
-                        webgl_vendor="Intel Inc.",
-                        renderer=renderer,
-                        fix_hairline=True,
-                        )
-                self._log(logging.INFO, "Stealth JS Enjekte Edildi.")
-            except ImportError:
-                self._log(logging.WARNING, "selenium-stealth kütüphanesi bulunamadı, standart ayarlar ile devam ediliyor.")
-                
-            self.wait = WebDriverWait(self.driver, 20)
-            self._log(logging.INFO, "Chrome WebDriver başlatıldı (Network Loglama Aktif)")
-            return True
-        except Exception as e:
-            self._log(logging.ERROR, f"WebDriver başlatma hatası: {e}")
-            return False
+        """Launch Chrome via BrowserFactory and share the driver with LoginManager."""
+        result = self._browser.create_driver()
+        if result:
+            self.driver = self._browser.driver
+            self.wait = self._browser.wait
+            self._login_mgr.set_driver(self.driver)
+        return result
+
     def dump_network_logs(self):
-        """Performans loglarını JSON dosyasına kaydeder (API Analizi için)"""
-        try:
-            if not self.driver: return
-            
-            logs = self.driver.get_log("performance")
-            import json
-            
-            # Sadece Network.requestWillBeSent veya responseReceived olaylarını filtrele
-            # Dosya boyutunu küçültmek için
-            filtered_logs = []
-            for entry in logs:
-                try:
-                    msg = json.loads(entry["message"])["message"]
-                    if "Network.requestWillBeSent" in msg["method"] or "Network.responseReceived" in msg["method"]:
-                        # Sadece XHR/Fetch/Document isteklerini al (Resim/CSS gerek yok)
-                        type_ = msg["params"].get("type", "") or msg["params"].get("request", {}).get("type", "") # Bazen type request içinde
-                        #if type_ in ["XHR", "Fetch", "Document"]:
-                        filtered_logs.append(msg) # Ã…imdilik hepsini alalım, endpoint'i kaçırmayalım
-                except: pass
-            
-            with open("network_activity.json", "w", encoding="utf-8") as f:
-                json.dump(filtered_logs, f, indent=2)
-            
-            logger.info(f"✅ Network logları kaydedildi: network_activity.json ({len(filtered_logs)} olay)")
-        except Exception as e:
-            logger.error(f"Log dump hatası: {e}")
+        self._browser.dump_network_logs()
+
     def stop_driver(self):
-        """WebDriver'ı kapat Ã¢â‚¬â€ çıkmadan önce cookie'leri kaydet"""
+        """Shut down WebDriver via LoginManager (save cookies) + BrowserFactory (quit)."""
         if self.driver:
             try:
-                self._save_cookies()
+                self._login_mgr.save_cookies()
             except Exception:
                 pass
-            try:
-                self.driver.quit()
-                proxy_manager.report_release(self.proxy)
-            except Exception:
-                pass
-            finally:
-                self.driver = None
+            self._browser.driver = self.driver
+            self._browser.close_driver()
+            self.driver = None
             self.is_logged_in = False
-            self._log(logging.INFO, "WebDriver kapatıldı")
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Authentication — delegated to LoginManager
+    # ═══════════════════════════════════════════════════════════════════════
+
     def _save_cookies(self):
-        """B2: Tarayıcı cookie'lerini diske kaydet"""
-        if not self.driver:
-            return
-        try:
-            import json
-            os.makedirs(self._session_dir, exist_ok=True)
-            cookies = self.driver.get_cookies()
-            with open(self._session_file, 'w', encoding='utf-8') as f:
-                json.dump(cookies, f)
-            self._log(logging.INFO, f"🔍 {len(cookies)} cookie kaydedildi: {self._session_file}")
-        except Exception as e:
-            self._log(logging.DEBUG, f"Cookie kaydetme hatası: {e}")
+        self._login_mgr.save_cookies()
+
     def _load_cookies(self):
-        """B2: Kaydedilmiş cookie'leri yükle ve oturumun hÃƒÂ¢lÃƒÂ¢ geçerli olup olmadığını kontrol et"""
-        if not self.driver or not os.path.exists(self._session_file):
-            return False
-        try:
-            import json
-            # Önce domain'e git ki cookie'ler set edilebilsin
-            self.driver.get(self.LOGIN_URL)
-            time.sleep(2)
-            
-            with open(self._session_file, 'r', encoding='utf-8') as f:
-                cookies = json.load(f)
-            
-            for cookie in cookies:
-                # Bazı Cookie alanları Selenium'da sorun çıkarabilir
-                cookie.pop('sameSite', None)
-                cookie.pop('storeId', None)
-                try:
-                    self.driver.add_cookie(cookie)
-                except Exception:
-                    pass
-            
-            self._log(logging.INFO, f"🔍 {len(cookies)} cookie yüklendi, oturum kontrol ediliyor...")
-            
-            # Appointment sayfasına giderek oturum geçerliliğini test et
-            self.driver.get(self.APPOINTMENT_URL)
-            time.sleep(3)
-            
-            current_url = self.driver.current_url.lower()
-            if 'login' not in current_url and 'account' not in current_url:
-                self._log(logging.INFO, "✅ Cookie oturumu geçerli! Login atlanıyor.")
-                self.is_logged_in = True
-                return True
-            else:
-                self._log(logging.INFO, "❌ Cookie oturumu süresi dolmuş. Normal login yapılacak.")
-                return False
-        except Exception as e:
-            self._log(logging.DEBUG, f"Cookie yükleme hatası: {e}")
-            return False
+        result = self._login_mgr.load_cookies()
+        if result:
+            self.is_logged_in = True
+        return result
+
     def login(self, email: str, password: str, solve_captcha: bool = True) -> bool:
-        """BLS sitesine giriş yap Ã¢â‚¬â€ state-machine yaklaşımı"""
-        try:
-            self._log(logging.INFO, "Giriş yapılıyor...")
-            # Go to login page and measure latency
-            start_time = time.time()
-            self.driver.get(self.LOGIN_URL)
-            end_time = time.time()
-            
-            # Report latency to the Proxy Manager and Prometheus
-            latency_ms = (end_time - start_time) * 1000
-            proxy_manager.report_latency(self.proxy, latency_ms)
-            METRIC_PAGE_LOAD_LATENCY.observe(end_time - start_time)
-            logger.info(f"Page Load Latency: {latency_ms:.0f}ms")
-            time.sleep(2) # Anti-bot amaçlı bekleme (Site çok hızlı girişi şüpheli bulabilir)
-            # Ã¢â€â‚¬Ã¢â€â‚¬ Adım 1: Email alanını bul ve doldur Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-            visible_inputs = self._get_visible_text_inputs()
-            self._log(logging.INFO, f"Görünür input sayısı: {len(visible_inputs)}")
-            if not visible_inputs:
-                self._log(logging.ERROR, "Hiç görünür input bulunamadı")
-                return False
-            email_field = visible_inputs[0]
-            self.driver.execute_script(
-                "arguments[0].value = arguments[1]; "
-                "arguments[0].dispatchEvent(new Event('input', {bubbles:true})); "
-                "arguments[0].dispatchEvent(new Event('change', {bubbles:true}));",
-                email_field, email
-            )
-            self._log(logging.INFO, f"Email girildi: {email}")
-            time.sleep(0.5)
-            # Ã¢â€â‚¬Ã¢â€â‚¬ Adım 2: Verify butonu Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-            verify_btn = self._find_visible_button(["Verify", "verify", "VERIFY"])
-            if verify_btn:
-                self._log(logging.INFO, "Verify tıklanıyor...")
-                self.driver.execute_script("arguments[0].click();", verify_btn)
-                time.sleep(3)
-                # Erken başarı kontrolü Ã¢â‚¬â€ kullanıcı zaten giriş yaptı mı?
-                if self._check_login_success():
-                    return True
-                # CAPTCHA var mı?
-                if solve_captcha:
-                    api_key = self.config.get("2captcha_key", "").strip()
-                    captcha_solver = CaptchaSolver(self.driver, api_key=api_key)
-                    if captcha_solver.is_captcha_present():
-                        # KRİTİK KONTROL: Ã…ifre alanı zaten var mı?
-                        # Eğer şifre alanı varsa, önce şifre girilmeli. Captcha'yı burda çözme!
-                        if self._find_password_field():
-                            self._log(logging.INFO, "Captcha ve Ã…ifre alanı aynı anda tespit edildi. Önce şifre girilecek...")
-                        else:
-                            self._log(logging.INFO, "Sadece CAPTCHA var (Email onayı olabilir). Çözülüyor...")
-                            captcha_solver.solve()
-                            # CAPTCHA sonrası giriş başarılı mı?
-                            if self._check_login_success():
-                                return True
-                total_wait = 60 if not solve_captcha else 20
-                self._log(logging.INFO, f"Ã…ifre sayfası bekleniyor... ({total_wait/2} sn)")
-                for _ in range(total_wait):
-                    time.sleep(0.5)
-                    if self._check_login_success():
-                        return True
-                    inputs = self._get_visible_text_inputs()
-                    if inputs:
-                        break
-                    # Eğer Captcha varsa ve çözülmediyse hala bekliyor olabiliriz
-                    if solve_captcha and captcha_solver.is_captcha_present() and not self._find_password_field():
-                         self._log(logging.DEBUG, "Hala Captcha var ama şifre yok...")
-                         
-                    self._log(logging.DEBUG, "Ã…ifre alanı henüz yok, bekleniyor...")
-            # Ã¢â€â‚¬Ã¢â€â‚¬ Adım 3: Ã…ifre alanı ve CAPTCHA Döngüsü Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-            # CAPTCHA yanlış girildiğinde sayfa yenilenebilir veya şifre silinebilir.
-            # Bu yüzden şifre girme ve CAPTCHA çözme işlemini bir döngüde yapıyoruz.
-            max_login_attempts = 3
-            
-            for attempt in range(max_login_attempts):
-                self._log(logging.INFO, f"Giriş/Ã…ifre Denemesi: {attempt + 1}/{max_login_attempts}")
-                
-                # Sayfanın yüklenmesi/yenilenmesi için kısa bir bekleme
-                time.sleep(1)
-                
-                if self._check_login_success():
-                    return True
-                    
-                password_field = self._find_password_field()
-                if not password_field:
-                    if attempt == 0:
-                        # İlk denemede bulamazsa, belki kullanıcıya manuel giriş için süre tanınmalı
-                        self._log(logging.WARNING, "Ã…ifre alanı bulunamadı Ã¢â‚¬â€ lütfen tarayıcıdan şifreyi girin (90 sn)")
-                        for _ in range(90):
-                            time.sleep(1)
-                            if self._check_login_success():
-                                self._log(logging.INFO, "✅ Kullanıcı manuel giriş yaptı!")
-                                self.is_logged_in = True
-                                return True
-                            password_field = self._find_password_field()
-                            # Eğer şifre alanı geri geldiyse, döngüden çıkıp JS ile dolduracak
-                            if password_field: 
-                                break
-                    
-                    if not password_field:
-                        self._log(logging.ERROR, "Ã…ifre alanı bulunamadı, yeniden deneniyor...")
-                        continue # Bir sonraki denemeye geç (belki sayfa yenileniyordur)
-                # Ã…ifre alanı varsa doldur
-                if password_field:
-                    try:
-                        self.driver.execute_script(
-                            "arguments[0].value = arguments[1]; "
-                            "arguments[0].dispatchEvent(new Event('input', {bubbles:true})); "
-                            "arguments[0].dispatchEvent(new Event('change', {bubbles:true}));",
-                            password_field, password
-                        )
-                        self._log(logging.INFO, "Ã…ifre girildi")
-                        time.sleep(0.5)
-                    except Exception as pe:
-                        self._log(logging.ERROR, f"Ã…ifre alanına yazılırken hata: {pe}")
-                        continue # Hata olursa tekrar dene
-                if not solve_captcha:
-                    self._log(logging.WARNING, "CAPTCHA ve Ã…ifre (Varsa) Manuel Giriş için 20 sn bekleniyor...")
-                    time.sleep(20)
-                    if self._check_login_success(): return True
-                    continue
-                # Ã¢â€â‚¬Ã¢â€â‚¬ CAPTCHA (Ã…ifre girildikten sonra) Ã¢â€â‚¬Ã¢â€â‚¬
-                api_key = self.config.get("2captcha_key", "").strip()
-                captcha_solver = CaptchaSolver(self.driver, api_key=api_key)
-                
-                if captcha_solver.is_captcha_present():
-                     self._log(logging.INFO, "CAPTCHA çözülüyor (Ã…ifre girildi, şimdi Submit edilecek)...")
-                     if captcha_solver.solve():
-                         self._log(logging.INFO, "Captcha Submit edildi. Sonuç bekleniyor...")
-                         time.sleep(5)
-                         if self._check_login_success(log=True):
-                             return True
-                         else:
-                             self._log(logging.WARNING, "Captcha çözüldü ancak giriş başarılı olmadı. Ã…ifre silinmiş olabilir, tekrar denenecek.")
-                             # Bazen captcha submit sonrası başarısız olursa error message çıkar
-                             self._check_login_success(log=False) # Hataları loglamak için
-                     else:
-                         self._log(logging.ERROR, "Captcha çözülemedi, tekrar denenecek.")
-                else:
-                    # Captcha yoksa ama şifre girildiyse, belki bir Login butonu vardır
-                    login_btn = self._find_visible_button(["Login", "Giriş"])
-                    if login_btn:
-                        self._log(logging.INFO, "CAPTCHA yok, Login butonuna tıklanıyor...")
-                        self.driver.execute_script("arguments[0].click();", login_btn)
-                        time.sleep(4)
-                        if self._check_login_success(log=True):
-                            return True
-                    else:
-                        self._log(logging.INFO, "CAPTCHA yok, Login butonu da yok. Sayfanın yüklenmesi bekleniyor...")
-                        time.sleep(2)
-                        if self._check_login_success(log=True): return True
-            # Döngü bitti ve girilemedi
-            return self._check_login_success(log=True)
-        except Exception as e:
-            import traceback
-            tb_str = traceback.format_exc()
-            self._log(logging.ERROR, f"Giriş hatası: {e}")
-            self._log(logging.ERROR, f"Traceback:\n{tb_str}")
-            self.is_logged_in = False
-            return False
+        result = self._login_mgr.login(email, password, solve_captcha)
+        self.is_logged_in = self._login_mgr.is_logged_in
+        return result
+
     def _check_login_success(self, log: bool = False) -> bool:
-        """URL'ye bakarak giriş başarılı mı kontrol et"""
-        try:
-            url = self.driver.current_url.lower()
-            if "login" not in url:
-                self.is_logged_in = True
-                if log:
-                    self._log(logging.INFO, f"✅ Giriş başarılı! URL: {url}")
-                METRIC_LOGIN_ATTEMPTS.labels('success').inc()
-                return True
-            if log:
-                # Hata mesajlarını topla
-                for sel in [".validation-summary-errors", ".field-validation-error",
-                             ".alert-danger", ".error-message"]:
-                    try:
-                        errs = self.driver.find_elements(By.CSS_SELECTOR, sel)
-                        for e in errs:
-                            if e.text.strip():
-                                self._log(logging.ERROR, f"Hata: {e.text.strip()}")
-                    except Exception:
-                        pass
-                self._log(logging.ERROR, f"Giriş başarısız Ã¢â‚¬â€ URL: {url}")
-                METRIC_LOGIN_ATTEMPTS.labels('fail').inc()
-                proxy_manager.report_failure(self.proxy) # Report failure on login error
-                report_account_risk(self.user_data.get('id'), 15, reason="Giriş Hatası (Login Fail)")
-        except Exception:
-            pass
-        return False
+        result = self._login_mgr._check_login_success(log)
+        self.is_logged_in = self._login_mgr.is_logged_in
+        return result
+
     def _find_password_field(self):
-        """Ã…ifre alanını bul Ã¢â‚¬â€ type='password' veya görünür ikinci input"""
-        # Önce type='password' dene
-        try:
-            pw_fields = self.driver.find_elements(By.CSS_SELECTOR, "input[type='password']")
-            pw_fields = [f for f in pw_fields if f.is_displayed() and f.is_enabled()]
-            if pw_fields:
-                return pw_fields[0]
-        except Exception:
-            pass
-        # Görünür input'ları al
-        visible = self._get_visible_text_inputs()
-        if len(visible) >= 2:
-            return visible[1]  # İkinci input = şifre
-        if len(visible) == 1:
-            return visible[0]  # Tek input kaldıysa o şifre
-        return None
-    def _get_visible_text_inputs(self) -> list:
-        """Sayfadaki görünür, doldurulabilir text/password input'larını döner"""
-        try:
-            inputs = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                "input[type='text'], input[type='password'], input[type='email'], input:not([type])"
-            )
-            result = []
-            for inp in inputs:
-                try:
-                    if (inp.is_displayed() and inp.is_enabled()
-                            and inp.get_attribute("type") not in ("hidden", "submit", "button",
-                                                                   "checkbox", "radio", "file")):
-                        result.append(inp)
-                except Exception:
-                    pass
-            return result
-        except Exception:
-            return []
+        return self._login_mgr._find_password_field()
+
+    def _get_visible_text_inputs(self):
+        return self._login_mgr._get_visible_text_inputs()
+
     def _find_visible_button(self, texts: list):
-        """Verilen metinlerden birini içeren görünür butonu bul"""
-        try:
-            btns = self.driver.find_elements(By.TAG_NAME, "button")
-            btns += self.driver.find_elements(By.CSS_SELECTOR, "input[type='submit']")
-            for btn in btns:
-                if not btn.is_displayed():
-                    continue
-                btn_text = btn.text.strip() or btn.get_attribute("value") or ""
-                for t in texts:
-                    if t.lower() in btn_text.lower():
-                        return btn
-        except Exception:
-            pass
-        return None
+        return self._login_mgr._find_visible_button(texts)
+
     def _find_element_multi(self, selectors: list, timeout: int = 10):
-        """Birden fazla seçici dener, ilk bulunanı döner"""
-        import time as _time
-        deadline = _time.time() + timeout
-        while _time.time() < deadline:
-            for by, value in selectors:
-                try:
-                    el = self.driver.find_element(by, value)
-                    if el.is_displayed():
-                        return el
-                except Exception:
-                    pass
-            _time.sleep(0.5)
-        return None
-    def _solve_captcha_with_fallback(self, captcha_solver: "CaptchaSolver"):
-        """CAPTCHA çöz, başarısız olursa kullanıcıya 60 sn ver"""
-        captcha_ok = captcha_solver.solve()
-        if not captcha_ok:
-            self._log(logging.WARNING, "CAPTCHA otomatik çözülemedi Ã¢â‚¬â€ lütfen tarayıcıdan manuel çözün (15 sn)")
-            for _ in range(15):
-                time.sleep(1)
-                if not captcha_solver.is_captcha_present():
-                    self._log(logging.INFO, "CAPTCHA manuel olarak çözüldü")
-                    break
+        return self._login_mgr.find_element_multi(selectors, timeout)
+
+    def _solve_captcha_with_fallback(self, captcha_solver):
+        return self._login_mgr._solve_captcha_with_fallback(captcha_solver)
+
     def register(self, email: str, password: str, first_name: str, last_name: str,
                  phone: str) -> bool:
-        """Yeni hesap oluştur"""
-        try:
-            self._log(logging.INFO, "Kayıt sayfasına gidiliyor...")
-            self.driver.get(self.REGISTER_URL)
-            time.sleep(2)
-            # Form alanlarını doldur
-            fields = {
-                "FirstName": first_name,
-                "LastName": last_name,
-                "EmailId": email,
-                "MobileNo": phone,
-                "Password": password,
-                "ConfirmPassword": password,
-            }
-            for field_id, value in fields.items():
-                try:
-                    field = self.wait.until(
-                        EC.presence_of_element_located((By.ID, field_id))
-                    )
-                    field.clear()
-                    field.send_keys(value)
-                    time.sleep(0.3)
-                except Exception as e:
-                    self._log(logging.WARNING, f"Alan bulunamadı: {field_id} - {e}")
-            # Kayıt butonu
-            try:
-                register_btn = self.driver.find_element(By.ID, "btnRegister")
-                register_btn.click()
-            except NoSuchElementException:
-                # Alternatif buton arayışı
-                btns = self.driver.find_elements(By.TAG_NAME, "button")
-                for btn in btns:
-                    if "register" in btn.text.lower() or "kayıt" in btn.text.lower():
-                        btn.click()
-                        self._log(logging.INFO, "Sisteme Giriş Yap butonu tıklandı.")
-                        break
-            # Risk-based Adaptive Delay
-            # High risk accounts wait longer to simulate scared/careful human behavior
-            risk_score = get_account_risk(self.user_data.get('id'))
-            delay = 2
-            if risk_score > 30: delay = 4
-            if risk_score > 50: delay = 6
-            time.sleep(delay)
-            time.sleep(3)
-            # Başarı kontrolü
-            current_url = self.driver.current_url
-            if "register" not in current_url.lower():
-                self._log(logging.INFO, "Kayıt başarılı!")
-                return True
-            else:
-                try:
-                    error = self.driver.find_element(By.CLASS_NAME, "validation-summary-errors")
-                    self._log(logging.ERROR, f"Kayıt hatası: {error.text}")
-                except NoSuchElementException:
-                    self._log(logging.WARNING, "Kayıt durumu belirsiz")
-                return False
-        except Exception as e:
-            self._log(logging.ERROR, f"Kayıt hatası: {e}")
-            return False
+        return self._login_mgr.register(email, password, first_name, last_name, phone)
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Business Logic — appointment checking, form filling, booking
+    # These remain in this file due to deeply interwoven JS templates.
+    # ═══════════════════════════════════════════════════════════════════════
+
     def check_appointment_availability(self) -> dict:
         """
         Randevu müsaitliğini kontrol et.
@@ -926,153 +432,300 @@ class BLSScraper:
                 if not text: return ""
                 text = text.replace("İ", "i").replace("I", "ı").lower()
                 return text.strip()
-            def select2_pick(search_value: str, step_name: str) -> bool:
-                """Acik listeden secim yapar - TEK ATOMIK JS CAGRISI (50+ round-trip yerine 1)"""
-                try:
-                    search_norm = normalize_tr(search_value)
-                    result = self.driver.execute_script("""
-                        var searchNorm = arguments[0];
-                        
-                        function normTr(t) {
-                            if(!t) return '';
-                            return t.replace(/İ/g,'i').replace(/I/g,'ı').toLowerCase().trim();
-                        }
-                        
-                        var sb = document.querySelector('.select2-search__field');
-                        if(sb) {
-                            sb.value = arguments[1];
-                            sb.dispatchEvent(new Event('input', {bubbles:true}));
-                            sb.dispatchEvent(new Event('keyup', {bubbles:true}));
-                        }
-                        
-                        var opts = document.querySelectorAll('.select2-results__option:not(.select2-results__option--disabled)');
-                        
-                        for(var i=0; i<opts.length; i++) {
-                            if(opts[i].offsetWidth <= 0) continue;
-                            if(normTr(opts[i].textContent) === searchNorm) {
-                                opts[i].scrollIntoView({block:'nearest'});
-                                opts[i].click();
-                                return 'EXACT:' + opts[i].textContent.trim();
-                            }
-                        }
-                        
-                        for(var i=0; i<opts.length; i++) {
-                            if(opts[i].offsetWidth <= 0) continue;
-                            if(normTr(opts[i].textContent).indexOf(searchNorm) !== -1) {
-                                opts[i].scrollIntoView({block:'nearest'});
-                                opts[i].click();
-                                return 'PARTIAL:' + opts[i].textContent.trim();
-                            }
-                        }
-                        
-                        var allLis = document.querySelectorAll('li');
-                        for(var i=0; i<allLis.length; i++) {
-                            if(allLis[i].offsetWidth <= 0 || !allLis[i].textContent.trim()) continue;
-                            if(normTr(allLis[i].textContent).indexOf(searchNorm) !== -1) {
-                                allLis[i].scrollIntoView({block:'nearest'});
-                                allLis[i].click();
-                                return 'FALLBACK:' + allLis[i].textContent.trim();
-                            }
-                        }
-                        
-                        return null;
-                    """, search_norm, search_value)
-                    
-                    if result:
-                        logger.info(f"  \u2713 {step_name}: {result}")
-                        return True
-                    
-                    logger.warning(f"  {step_name}: '{search_value}' bulunamadi.")
-                    return False
-                except Exception as e:
-                    logger.debug(f"  select2_pick error: {e}")
-                return False
-
-            def click_container_by_keywords(keywords: list) -> bool:
-                """
-                Label'a en yakin dropdown container'i bulur ve tiklar.
-                TEK ATOMIK JS CAGRISI - 50+ Selenium round-trip yerine 1 cagri.
-                """
-                try:
-                    result = self.driver.execute_script("""
-                        var keywords = arguments[0];
-                        
-                        var labels = document.querySelectorAll('label');
-                        var target = null;
-                        for(var i=0; i<labels.length; i++) {
-                            if(labels[i].offsetWidth <= 0) continue;
-                            var txt = labels[i].textContent.toLowerCase();
-                            for(var k=0; k<keywords.length; k++) {
-                                if(txt.indexOf(keywords[k].toLowerCase()) !== -1) {
-                                    target = labels[i];
-                                    break;
-                                }
-                            }
-                            if(target) break;
-                        }
-                        
-                        if(!target) return 'LABEL_NOT_FOUND';
-                        
-                        var lY = target.getBoundingClientRect().top + window.scrollY;
-                        
-                        var selectors = [
-                            '.select2-selection', '.select2-selection--single',
-                            'span.select2-container', 'div.select2-container',
-                            '.k-dropdown', '.k-input', 'select'
-                        ];
-                        
-                        var best = null;
-                        var bestDist = 999;
-                        
-                        for(var s=0; s<selectors.length; s++) {
-                            var els = document.querySelectorAll(selectors[s]);
-                            for(var j=0; j<els.length; j++) {
-                                var el = els[j];
-                                if(el.offsetWidth <= 0) continue;
-                                var eY = el.getBoundingClientRect().top + window.scrollY;
-                                var dist = eY - lY;
-                                if(dist >= -20 && dist < 300 && dist < bestDist) {
-                                    bestDist = dist;
-                                    best = el;
-                                }
-                            }
-                        }
-                        
-                        if(!best) {
-                            target.scrollIntoView({block:'center', behavior:'instant'});
-                            var rect = target.getBoundingClientRect();
-                            var offsets = [15, 25, 35, 45];
-                            for(var o=0; o<offsets.length; o++) {
-                                var el = document.elementFromPoint(rect.x + 20, rect.y + rect.height + offsets[o]);
-                                if(el && el.tagName !== 'HTML' && el.tagName !== 'BODY' && el.tagName !== 'FORM') {
-                                    best = el;
-                                    break;
-                                }
-                            }
-                        }
-                        
-                        if(!best) return 'CONTAINER_NOT_FOUND';
-                        
-                        best.scrollIntoView({block:'center', behavior:'instant'});
-                        if(typeof $ !== 'undefined') { $(best).trigger('click'); }
-                        else { best.click(); }
-                        
-                        return 'OK:' + bestDist + 'px';
-                    """, keywords)
-                    
-                    if result and str(result).startswith('OK'):
-                        logger.info(f"  Container tiklandi ({result})")
-                        return True
-                    
-                    if result == 'LABEL_NOT_FOUND':
-                        logger.warning(f"  Label bulunamadi: {keywords}")
-                    elif result == 'CONTAINER_NOT_FOUND':
-                        logger.warning(f"  Container bulunamadi (Label: {keywords[0]})")
-                    
-                    return False
-                except Exception as e:
-                    logger.debug(f"  click_container error: {e}")
-                return False
+            def select2_pick(search_value: str, step_name: str) -> bool:
+
+                """Acik listeden secim yapar - TEK ATOMIK JS CAGRISI (50+ round-trip yerine 1)"""
+
+                try:
+
+                    search_norm = normalize_tr(search_value)
+
+                    result = self.driver.execute_script("""
+
+                        var searchNorm = arguments[0];
+
+                        
+
+                        function normTr(t) {
+
+                            if(!t) return '';
+
+                            return t.replace(/İ/g,'i').replace(/I/g,'ı').toLowerCase().trim();
+
+                        }
+
+                        
+
+                        var sb = document.querySelector('.select2-search__field');
+
+                        if(sb) {
+
+                            sb.value = arguments[1];
+
+                            sb.dispatchEvent(new Event('input', {bubbles:true}));
+
+                            sb.dispatchEvent(new Event('keyup', {bubbles:true}));
+
+                        }
+
+                        
+
+                        var opts = document.querySelectorAll('.select2-results__option:not(.select2-results__option--disabled)');
+
+                        
+
+                        for(var i=0; i<opts.length; i++) {
+
+                            if(opts[i].offsetWidth <= 0) continue;
+
+                            if(normTr(opts[i].textContent) === searchNorm) {
+
+                                opts[i].scrollIntoView({block:'nearest'});
+
+                                opts[i].click();
+
+                                return 'EXACT:' + opts[i].textContent.trim();
+
+                            }
+
+                        }
+
+                        
+
+                        for(var i=0; i<opts.length; i++) {
+
+                            if(opts[i].offsetWidth <= 0) continue;
+
+                            if(normTr(opts[i].textContent).indexOf(searchNorm) !== -1) {
+
+                                opts[i].scrollIntoView({block:'nearest'});
+
+                                opts[i].click();
+
+                                return 'PARTIAL:' + opts[i].textContent.trim();
+
+                            }
+
+                        }
+
+                        
+
+                        var allLis = document.querySelectorAll('li');
+
+                        for(var i=0; i<allLis.length; i++) {
+
+                            if(allLis[i].offsetWidth <= 0 || !allLis[i].textContent.trim()) continue;
+
+                            if(normTr(allLis[i].textContent).indexOf(searchNorm) !== -1) {
+
+                                allLis[i].scrollIntoView({block:'nearest'});
+
+                                allLis[i].click();
+
+                                return 'FALLBACK:' + allLis[i].textContent.trim();
+
+                            }
+
+                        }
+
+                        
+
+                        return null;
+
+                    """, search_norm, search_value)
+
+                    
+
+                    if result:
+
+                        logger.info(f"  \u2713 {step_name}: {result}")
+
+                        return True
+
+                    
+
+                    logger.warning(f"  {step_name}: '{search_value}' bulunamadi.")
+
+                    return False
+
+                except Exception as e:
+
+                    logger.debug(f"  select2_pick error: {e}")
+
+                return False
+
+
+
+            def click_container_by_keywords(keywords: list) -> bool:
+
+                """
+
+                Label'a en yakin dropdown container'i bulur ve tiklar.
+
+                TEK ATOMIK JS CAGRISI - 50+ Selenium round-trip yerine 1 cagri.
+
+                """
+
+                try:
+
+                    result = self.driver.execute_script("""
+
+                        var keywords = arguments[0];
+
+                        
+
+                        var labels = document.querySelectorAll('label');
+
+                        var target = null;
+
+                        for(var i=0; i<labels.length; i++) {
+
+                            if(labels[i].offsetWidth <= 0) continue;
+
+                            var txt = labels[i].textContent.toLowerCase();
+
+                            for(var k=0; k<keywords.length; k++) {
+
+                                if(txt.indexOf(keywords[k].toLowerCase()) !== -1) {
+
+                                    target = labels[i];
+
+                                    break;
+
+                                }
+
+                            }
+
+                            if(target) break;
+
+                        }
+
+                        
+
+                        if(!target) return 'LABEL_NOT_FOUND';
+
+                        
+
+                        var lY = target.getBoundingClientRect().top + window.scrollY;
+
+                        
+
+                        var selectors = [
+
+                            '.select2-selection', '.select2-selection--single',
+
+                            'span.select2-container', 'div.select2-container',
+
+                            '.k-dropdown', '.k-input', 'select'
+
+                        ];
+
+                        
+
+                        var best = null;
+
+                        var bestDist = 999;
+
+                        
+
+                        for(var s=0; s<selectors.length; s++) {
+
+                            var els = document.querySelectorAll(selectors[s]);
+
+                            for(var j=0; j<els.length; j++) {
+
+                                var el = els[j];
+
+                                if(el.offsetWidth <= 0) continue;
+
+                                var eY = el.getBoundingClientRect().top + window.scrollY;
+
+                                var dist = eY - lY;
+
+                                if(dist >= -20 && dist < 300 && dist < bestDist) {
+
+                                    bestDist = dist;
+
+                                    best = el;
+
+                                }
+
+                            }
+
+                        }
+
+                        
+
+                        if(!best) {
+
+                            target.scrollIntoView({block:'center', behavior:'instant'});
+
+                            var rect = target.getBoundingClientRect();
+
+                            var offsets = [15, 25, 35, 45];
+
+                            for(var o=0; o<offsets.length; o++) {
+
+                                var el = document.elementFromPoint(rect.x + 20, rect.y + rect.height + offsets[o]);
+
+                                if(el && el.tagName !== 'HTML' && el.tagName !== 'BODY' && el.tagName !== 'FORM') {
+
+                                    best = el;
+
+                                    break;
+
+                                }
+
+                            }
+
+                        }
+
+                        
+
+                        if(!best) return 'CONTAINER_NOT_FOUND';
+
+                        
+
+                        best.scrollIntoView({block:'center', behavior:'instant'});
+
+                        if(typeof $ !== 'undefined') { $(best).trigger('click'); }
+
+                        else { best.click(); }
+
+                        
+
+                        return 'OK:' + bestDist + 'px';
+
+                    """, keywords)
+
+                    
+
+                    if result and str(result).startswith('OK'):
+
+                        logger.info(f"  Container tiklandi ({result})")
+
+                        return True
+
+                    
+
+                    if result == 'LABEL_NOT_FOUND':
+
+                        logger.warning(f"  Label bulunamadi: {keywords}")
+
+                    elif result == 'CONTAINER_NOT_FOUND':
+
+                        logger.warning(f"  Container bulunamadi (Label: {keywords[0]})")
+
+                    
+
+                    return False
+
+                except Exception as e:
+
+                    logger.debug(f"  click_container error: {e}")
+
+                return False
+
             # Ã¢â€â‚¬Ã¢â€â‚¬ 3. Step-by-Step Filling (with retry on label-not-found) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
             
             max_form_retries = 3

@@ -1,7 +1,7 @@
 import sqlite3
 import os
 import psycopg2
-from config.pg_adapter import pg_manager
+from data.database import db as pg_manager
 from config.database import DB_PATH, get_all_users, get_all_proxies
 import logging
 

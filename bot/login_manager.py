@@ -321,7 +321,7 @@ class LoginManager:
                     self._log(logging.INFO, "CAPTCHA çözülüyor (Şifre girildi, şimdi Submit edilecek)...")
                     if captcha_solver.solve():
                         self._log(logging.INFO, "Captcha Submit edildi. Sonuç bekleniyor...")
-                        time.sleep(5)
+                        time.sleep(2)  # PERF: was 5s
                         if self._check_login_success(log=True):
                             return True
                         else:

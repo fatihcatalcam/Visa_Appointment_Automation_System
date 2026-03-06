@@ -267,25 +267,29 @@ class CaptchaSolver:
 
             # Her hücrenin screen pozisyonunu al
             # img.captcha-img içermeyen ve boyutsuz olanları filtrele
+            # PERF: Batch JS — 1 call instead of N individual calls
             cells_with_rect = []
-            for cell in raw_cells:
-                try:
-                    data = self.driver.execute_script("""
-                        var el = arguments[0];
+            try:
+                all_rects = self.driver.execute_script("""
+                    var cells = arguments[0];
+                    var results = [];
+                    for (var i = 0; i < cells.length; i++) {
+                        var el = cells[i];
                         var rect = el.getBoundingClientRect();
                         var style = window.getComputedStyle(el);
-                        // Boyutsuz veya gizli olanları atla
-                        if (rect.width < 10 || rect.height < 10) return null;
-                        if (style.display === 'none') return null;
-                        // img.captcha-img içermeli
-                        if (el.querySelectorAll('img.captcha-img').length === 0) return null;
-                        return {top: Math.round(rect.top), left: Math.round(rect.left),
-                                w: rect.width, h: rect.height};
-                    """, cell)
+                        if (rect.width < 10 || rect.height < 10) { results.push(null); continue; }
+                        if (style.display === 'none') { results.push(null); continue; }
+                        if (el.querySelectorAll('img.captcha-img').length === 0) { results.push(null); continue; }
+                        results.push({top: Math.round(rect.top), left: Math.round(rect.left),
+                                w: rect.width, h: rect.height});
+                    }
+                    return results;
+                """, raw_cells)
+                for i, data in enumerate(all_rects or []):
                     if data:
-                        cells_with_rect.append((cell, data['top'], data['left']))
-                except Exception:
-                    pass
+                        cells_with_rect.append((raw_cells[i], data['top'], data['left']))
+            except Exception:
+                pass
 
             logger.info(f"   Geçerli hücre sayısı (img içeren, boyutlu): {len(cells_with_rect)}")
 
@@ -313,15 +317,20 @@ class CaptchaSolver:
                 unique_cells = [c for c, _, _ in cells_with_rect[-9:]]
 
             # Pozisyona göre sırala (satır x sütun = sol-üst'ten sağ-alt'a)
+            # PERF: Batch JS for sorting rects — 1 call instead of N
             cells_with_pos = []
-            for cell in unique_cells:
-                try:
-                    rect = self.driver.execute_script(
-                        "var r = arguments[0].getBoundingClientRect(); return {top: r.top, left: r.left};", cell
-                    )
-                    cells_with_pos.append((cell, rect['top'], rect['left']))
-                except Exception:
-                    cells_with_pos.append((cell, 0, 0))
+            try:
+                sort_rects = self.driver.execute_script("""
+                    var cells = arguments[0];
+                    return cells.map(function(el) {
+                        var r = el.getBoundingClientRect();
+                        return {top: r.top, left: r.left};
+                    });
+                """, unique_cells)
+                for i, rect in enumerate(sort_rects or []):
+                    cells_with_pos.append((unique_cells[i], rect.get('top', 0), rect.get('left', 0)))
+            except Exception:
+                cells_with_pos = [(c, 0, 0) for c in unique_cells]
 
             cells_with_pos.sort(key=lambda x: (round(x[1] / TOLERANCE) * TOLERANCE, x[2]))
             sorted_cells = [c for c, _, _ in cells_with_pos]
@@ -709,7 +718,7 @@ class CaptchaSolver:
                 
                 if not target_number:
                     logger.error("Hedef sayı bulunamadı.")
-                    time.sleep(2)
+                    time.sleep(1)
                     continue
 
                 target_str = str(target_number).strip()
@@ -719,7 +728,7 @@ class CaptchaSolver:
                 # 2. Hücreler
                 cells = self._find_captcha_cells(container_element=container)
                 if len(cells) < 9:
-                    time.sleep(1)
+                    time.sleep(0.5)
                     continue
                 cells = cells[:9]
 
@@ -758,30 +767,33 @@ class CaptchaSolver:
                     rj = resp.json()
                 except Exception as e:
                     logger.error(f"Network hatası: {e}")
-                    time.sleep(2)
+                    time.sleep(1)
                     continue
 
                 if rj.get("status") != 1:
                     logger.error(f"API Hatası: {rj.get('request')}")
-                    time.sleep(2)
+                    time.sleep(1)
                     continue
 
                 req_id = rj.get("request")
                 logger.info(f"   ✅ ID: {req_id}. Bekleniyor...")
 
                 # 6. Sonuç
+                # PERF: Adaptive polling — start at 2s, backoff to max 5s
                 indices = []
-                for _ in range(25):
-                    time.sleep(3)
+                poll_delay = 2.0
+                for poll_attempt in range(25):
+                    time.sleep(poll_delay)
                     try:
                         r = _req.get(f"https://2captcha.com/res.php?key={api_key}&action=get&id={req_id}&json=1", timeout=10)
                         j = r.json()
                         if j.get("status") == 1:
                             ans = j.get("request", "").replace("click:", "")
                             indices = [int(n)-1 for n in re.findall(r"\d+", ans)]
-                            logger.info(f"   📩 Cevap: {ans}")
+                            logger.info(f"   📩 Cevap: {ans} (poll #{poll_attempt+1})")
                             break
                         elif j.get("request") == "CAPCHA_NOT_READY":
+                            poll_delay = min(poll_delay + 0.5, 5.0)
                             continue
                         else:
                             break
@@ -797,21 +809,25 @@ class CaptchaSolver:
                 from selenium.webdriver.common.action_chains import ActionChains
                 import random
 
+                # PERF: Reuse cells list; only re-find on StaleElementReferenceException
+                from selenium.common.exceptions import StaleElementReferenceException
                 clicked_cnt = 0
                 for idx in indices:
                     if 0 <= idx < len(cells):
                         try:
-                            # Stale element riskine karşı yeniden bul
-                            # (Sayfa yenilenmiş olabilir mi? Genelde hayır ama güvenli olsun)
-                            current_cells = self._find_captcha_cells(container_element=container)
-                            if len(current_cells) > idx:
-                                c = current_cells[idx]
-                            else:
-                                c = cells[idx] # Fallback
+                            c = cells[idx]
 
                             # 1. Scroll
-                            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", c)
-                            time.sleep(random.uniform(0.2, 0.5))
+                            try:
+                                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", c)
+                            except StaleElementReferenceException:
+                                cells = self._find_captcha_cells(container_element=container)
+                                if len(cells) > idx:
+                                    c = cells[idx]
+                                    self.driver.execute_script("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", c)
+                                else:
+                                    continue
+                            time.sleep(random.uniform(0.1, 0.2))
                             
                             # 2. ActionChains ile Tıkla (Gerçek Mouse Olayı)
                             try:
@@ -827,17 +843,16 @@ class CaptchaSolver:
                             self.driver.execute_script("arguments[0].style.border='4px solid green';", c)
                             clicked_cnt += 1
                             
-                            # İnsan vari gecikme
-                            time.sleep(random.uniform(0.5, 1.2))
+                            # PERF: Reduced inter-click delay (was 0.5-1.2s)
+                            time.sleep(random.uniform(0.15, 0.4))
                             
                         except Exception as click_err:
                             logger.error(f"Hücre {idx} tıklama hatası: {click_err}")
                 
                 logger.info(f"   ✓ {clicked_cnt} hücre tıklandı.")
                 
-                # ÖNEMLİ: Tıklamalar sonrası sunucunun/JS'in algılaması için kısa bekleme
-                logger.info("   ⏳ Submit öncesi 3 saniye bekleniyor (Algılama için)...")
-                time.sleep(3)
+                # PERF: Reduced pre-submit wait (was 3s, JS propagation is instant)
+                time.sleep(1)
 
                 # 8. Submit (Sadece Captcha Container içindeki veya yakınındaki)
                 if self._click_submit(container_scope=container):
@@ -846,7 +861,7 @@ class CaptchaSolver:
 
             except Exception as e:
                 logger.error(f"Döngü hatası: {e}")
-                time.sleep(2)
+                time.sleep(1)
         
         return False
 
@@ -931,7 +946,7 @@ class CaptchaSolver:
                 self.driver.execute_script("arguments[0].click();", found_btn)
                 logger.info("🔧 JS click yapıldı (Fallback).")
             
-            time.sleep(2)
+            time.sleep(1)
             return True
         else:
             logger.warning("⚠️ Captcha özel submit butonu bulunamadı.")

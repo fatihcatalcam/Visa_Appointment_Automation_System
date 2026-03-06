@@ -71,3 +71,4 @@ Desktop.ini
 # ========================
 .gemini/
 .agents/
+logs/telemetry_metrics.json

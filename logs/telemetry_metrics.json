@@ -9250,3 +9250,85 @@
 {"timestamp": 1772880878.102672, "level": "INFO", "user_id": 2, "message": "WebDriver kapat\u0131ld\u0131", "proxy": ""}
 {"timestamp": 1772880897.0718207, "level": "INFO", "user_id": 2, "message": "WebDriver kapat\u0131ld\u0131", "proxy": ""}
 {"timestamp": 1772880897.434833, "level": "INFO", "user_id": 2, "message": "Bot durduruldu.", "proxy": ""}
+{"timestamp": 1772881246.2367065, "level": "INFO", "user_id": 1, "message": "Bot ba\u015flat\u0131l\u0131yor... [Scout Modu: Kapal\u0131]", "proxy": ""}
+{"timestamp": 1772881247.6527672, "level": "INFO", "user_id": 1, "message": "Gizli (Stealth Headless) modda ba\u015flat\u0131l\u0131yor... [UA: Chrome 121.0.1362.29]", "proxy": ""}
+{"timestamp": 1772881257.4342108, "level": "INFO", "user_id": 2, "message": "Bot ba\u015flat\u0131l\u0131yor... [Scout Modu: Kapal\u0131]", "proxy": ""}
+{"timestamp": 1772881259.0561209, "level": "INFO", "user_id": 2, "message": "Gizli (Stealth Headless) modda ba\u015flat\u0131l\u0131yor... [UA: Chrome 122.0.2863.15]", "proxy": ""}
+{"timestamp": 1772881282.016596, "level": "INFO", "user_id": 1, "message": "Chrome v145 alg\u0131land\u0131 (HKEY_CURRENT_USER\\Software\\Google\\Chrome\\BLBeacon), uyumlu driver kullan\u0131lacak.", "proxy": ""}
+{"timestamp": 1772881282.0438976, "level": "INFO", "user_id": 2, "message": "Chrome v145 alg\u0131land\u0131 (HKEY_CURRENT_USER\\Software\\Google\\Chrome\\BLBeacon), uyumlu driver kullan\u0131lacak.", "proxy": ""}
+{"timestamp": 1772881309.5601707, "level": "WARNING", "user_id": 2, "message": "Headless taray\u0131c\u0131 \u00e7\u00f6kt\u00fc, tekrar deneniyor (1/3): [WinError 183] Halen varolan bir dosya olu\u015fturulamaz: 'C:\\\\Users\\\\Fatih\\\\appdata\\\\roaming\\\\undetected_chromedriver\\\\undetected\\\\chromedriver-win32\\\\chromedriver.exe' -> 'C:\\\\Users\\\\Fatih\\\\appdata\\\\roaming\\\\undetected_chromedriver\\\\undetected_chromedriver.exe'", "proxy": ""}
+{"timestamp": 1772881314.9793155, "level": "INFO", "user_id": 1, "message": "Stealth JS Enjekte Edildi.", "proxy": ""}
+{"timestamp": 1772881315.0969024, "level": "INFO", "user_id": 2, "message": "Stealth JS Enjekte Edildi.", "proxy": ""}
+{"timestamp": 1772881315.298699, "level": "INFO", "user_id": 1, "message": "Chrome WebDriver ba\u015flat\u0131ld\u0131 (Network Loglama Aktif)", "proxy": ""}
+{"timestamp": 1772881315.4862912, "level": "INFO", "user_id": 2, "message": "Chrome WebDriver ba\u015flat\u0131ld\u0131 (Network Loglama Aktif)", "proxy": ""}
+{"timestamp": 1772881320.4383457, "level": "INFO", "user_id": 1, "message": "Giri\u015f yap\u0131l\u0131yor...", "proxy": ""}
+{"timestamp": 1772881323.3022096, "level": "INFO", "user_id": 2, "message": "\ud83d\udd0d 2 yedek cookie y\u00fcklendi, oturum tekrar kontrol ediliyor...", "proxy": ""}
+{"timestamp": 1772881324.9452028, "level": "INFO", "user_id": 1, "message": "G\u00f6r\u00fcn\u00fcr input say\u0131s\u0131: 1", "proxy": ""}
+{"timestamp": 1772881325.1077118, "level": "INFO", "user_id": 1, "message": "Email girildi: ayhan.bulut1@outlook.com", "proxy": ""}
+{"timestamp": 1772881326.0679145, "level": "INFO", "user_id": 1, "message": "Verify t\u0131klan\u0131yor...", "proxy": ""}
+{"timestamp": 1772881327.1782534, "level": "INFO", "user_id": 2, "message": "\u274c T\u00fcm oturumlar sona ermi\u015f. Normal login yap\u0131lacak.", "proxy": ""}
+{"timestamp": 1772881327.5260923, "level": "INFO", "user_id": 2, "message": "Giri\u015f yap\u0131l\u0131yor...", "proxy": ""}
+{"timestamp": 1772881330.9431207, "level": "INFO", "user_id": 1, "message": "Captcha ve \u015eifre alan\u0131 ayn\u0131 anda tespit edildi. \u00d6nce \u015fifre girilecek...", "proxy": ""}
+{"timestamp": 1772881331.0412552, "level": "INFO", "user_id": 1, "message": "\u015eifre sayfas\u0131 bekleniyor... (10.0 sn)", "proxy": ""}
+{"timestamp": 1772881331.2287498, "level": "INFO", "user_id": 2, "message": "G\u00f6r\u00fcn\u00fcr input say\u0131s\u0131: 1", "proxy": ""}
+{"timestamp": 1772881331.6649046, "level": "INFO", "user_id": 2, "message": "Email girildi: fthctlcm@outlook.com", "proxy": ""}
+{"timestamp": 1772881332.9602687, "level": "INFO", "user_id": 2, "message": "Verify t\u0131klan\u0131yor...", "proxy": ""}
+{"timestamp": 1772881332.9984663, "level": "INFO", "user_id": 1, "message": "Giri\u015f/\u015eifre Denemesi: 1/3", "proxy": ""}
+{"timestamp": 1772881336.558761, "level": "INFO", "user_id": 1, "message": "\u015eifre girildi", "proxy": ""}
+{"timestamp": 1772881337.7586005, "level": "INFO", "user_id": 1, "message": "CAPTCHA \u00e7\u00f6z\u00fcl\u00fcyor (\u015eifre girildi, \u015fimdi Submit edilecek)...", "proxy": ""}
+{"timestamp": 1772881389.5507681, "level": "INFO", "user_id": 1, "message": "Captcha Submit edildi. Sonu\u00e7 bekleniyor...", "proxy": ""}
+{"timestamp": 1772881391.8529975, "level": "ERROR", "user_id": 1, "message": "Hata: Invalid captcha selection", "proxy": ""}
+{"timestamp": 1772881392.0731676, "level": "ERROR", "user_id": 1, "message": "Giri\u015f ba\u015far\u0131s\u0131z \u2014 URL: https://turkey.blsspainglobal.com/global/newcaptcha/logincaptcha?data=ci9vvndgkvebwchta6jxij2vzdkiexfspjvwydjy%2ffjrp3d%2fcx2i0eiycv1max%2bmjq%2fh0pydgncijaveg3pqkjwn6qnq%2fz0cpiquxtknht6ukzpfokd2soo3gjsdqw5yeysf4fvrilfcfcre%2bkrfbvjqohbwrog54su%2bnseyzvq%3d&err=yy88eof%2bbmuewfp5kb0gmfga%2bvhiyeciiwng9yufk%2fksya8eedzxgeprrc2btyss", "proxy": ""}
+{"timestamp": 1772881392.8547978, "level": "WARNING", "user_id": 1, "message": "Captcha \u00e7\u00f6z\u00fcld\u00fc ancak giri\u015f ba\u015far\u0131l\u0131 olmad\u0131.", "proxy": ""}
+{"timestamp": 1772881393.227057, "level": "INFO", "user_id": 1, "message": "Giri\u015f/\u015eifre Denemesi: 2/3", "proxy": ""}
+{"timestamp": 1772881394.952383, "level": "INFO", "user_id": 1, "message": "\u015eifre girildi", "proxy": ""}
+{"timestamp": 1772881395.7132576, "level": "INFO", "user_id": 1, "message": "CAPTCHA \u00e7\u00f6z\u00fcl\u00fcyor (\u015eifre girildi, \u015fimdi Submit edilecek)...", "proxy": ""}
+{"timestamp": 1772881441.6473286, "level": "INFO", "user_id": 1, "message": "Captcha Submit edildi. Sonu\u00e7 bekleniyor...", "proxy": ""}
+{"timestamp": 1772881468.0546675, "level": "INFO", "user_id": 1, "message": "Durdurma sinyali al\u0131nd\u0131. Chrome kapat\u0131l\u0131yor...", "proxy": ""}
+{"timestamp": 1772881510.619452, "level": "INFO", "user_id": 2, "message": "\u015eifre sayfas\u0131 bekleniyor... (10.0 sn)", "proxy": ""}
+{"timestamp": 1772881511.7582216, "level": "INFO", "user_id": 2, "message": "Giri\u015f/\u015eifre Denemesi: 1/3", "proxy": ""}
+{"timestamp": 1772881513.723506, "level": "INFO", "user_id": 2, "message": "\u015eifre girildi", "proxy": ""}
+{"timestamp": 1772881514.9355733, "level": "INFO", "user_id": 2, "message": "CAPTCHA yok, Login butonu da yok. Bekleniyor...", "proxy": ""}
+{"timestamp": 1772881517.5267816, "level": "ERROR", "user_id": 2, "message": "Hata: Invalid appointment request", "proxy": ""}
+{"timestamp": 1772881517.9165537, "level": "ERROR", "user_id": 2, "message": "Giri\u015f ba\u015far\u0131s\u0131z \u2014 URL: https://turkey.blsspainglobal.com/global/account/login?err=fsnw%2fgzbaaqveqkuj2hg1yney2fvoxjfqmelekm%2fnhi%3d", "proxy": ""}
+{"timestamp": 1772881518.356309, "level": "INFO", "user_id": 2, "message": "Giri\u015f/\u015eifre Denemesi: 2/3", "proxy": ""}
+{"timestamp": 1772881520.5328257, "level": "INFO", "user_id": 2, "message": "\u015eifre girildi", "proxy": ""}
+{"timestamp": 1772881521.692782, "level": "INFO", "user_id": 2, "message": "CAPTCHA yok, Login butonu da yok. Bekleniyor...", "proxy": ""}
+{"timestamp": 1772881524.1185915, "level": "ERROR", "user_id": 2, "message": "Hata: Invalid appointment request", "proxy": ""}
+{"timestamp": 1772881524.144935, "level": "ERROR", "user_id": 2, "message": "Giri\u015f ba\u015far\u0131s\u0131z \u2014 URL: https://turkey.blsspainglobal.com/global/account/login?err=fsnw%2fgzbaaqveqkuj2hg1yney2fvoxjfqmelekm%2fnhi%3d", "proxy": ""}
+{"timestamp": 1772881524.1498597, "level": "INFO", "user_id": 2, "message": "Giri\u015f/\u015eifre Denemesi: 3/3", "proxy": ""}
+{"timestamp": 1772881526.571843, "level": "INFO", "user_id": 2, "message": "\u015eifre girildi", "proxy": ""}
+{"timestamp": 1772881527.9516003, "level": "INFO", "user_id": 2, "message": "CAPTCHA yok, Login butonu da yok. Bekleniyor...", "proxy": ""}
+{"timestamp": 1772881530.7083044, "level": "ERROR", "user_id": 2, "message": "Hata: Invalid appointment request", "proxy": ""}
+{"timestamp": 1772881531.1296363, "level": "ERROR", "user_id": 2, "message": "Giri\u015f ba\u015far\u0131s\u0131z \u2014 URL: https://turkey.blsspainglobal.com/global/account/login?err=fsnw%2fgzbaaqveqkuj2hg1yney2fvoxjfqmelekm%2fnhi%3d", "proxy": ""}
+{"timestamp": 1772881531.8581493, "level": "ERROR", "user_id": 2, "message": "Hata: Invalid appointment request", "proxy": ""}
+{"timestamp": 1772881531.869857, "level": "ERROR", "user_id": 2, "message": "Giri\u015f ba\u015far\u0131s\u0131z \u2014 URL: https://turkey.blsspainglobal.com/global/account/login?err=fsnw%2fgzbaaqveqkuj2hg1yney2fvoxjfqmelekm%2fnhi%3d", "proxy": ""}
+{"timestamp": 1772881531.8753722, "level": "ERROR", "user_id": 2, "message": "Giri\u015f ba\u015far\u0131s\u0131z. 60 sn sonra tekrar denenecek.", "proxy": ""}
+{"timestamp": 1772881567.2042859, "level": "INFO", "user_id": 1, "message": "\ud83d\udd0d 1 cookie kaydedildi: data\\sessions\\ayhan_bulut1_at_outlook_com_cookies.json", "proxy": ""}
+{"timestamp": 1772881567.3967927, "level": "ERROR", "user_id": 1, "message": "Hata: Invalid appointment request", "proxy": ""}
+{"timestamp": 1772881567.5629828, "level": "INFO", "user_id": 1, "message": "WebDriver kapat\u0131ld\u0131", "proxy": ""}
+{"timestamp": 1772881567.9551094, "level": "INFO", "user_id": 2, "message": "Durdurma sinyali al\u0131nd\u0131. Chrome kapat\u0131l\u0131yor...", "proxy": ""}
+{"timestamp": 1772881568.4637597, "level": "INFO", "user_id": 2, "message": "\ud83d\udd0d 2 cookie kaydedildi: data\\sessions\\fthctlcm_at_outlook_com_cookies.json", "proxy": ""}
+{"timestamp": 1772881568.7139277, "level": "INFO", "user_id": 2, "message": "WebDriver kapat\u0131ld\u0131", "proxy": ""}
+{"timestamp": 1772881568.8200288, "level": "INFO", "user_id": 2, "message": "\ud83d\udd0d 2 cookie kaydedildi: data\\sessions\\fthctlcm_at_outlook_com_cookies.json", "proxy": ""}
+{"timestamp": 1772881569.2258785, "level": "INFO", "user_id": 2, "message": "Bot durduruldu.", "proxy": ""}
+{"timestamp": 1772881584.6600523, "level": "ERROR", "user_id": 1, "message": "Giri\u015f ba\u015far\u0131s\u0131z \u2014 URL: https://turkey.blsspainglobal.com/global/account/login?err=fsnw%2fgzbaaqveqkuj2hg1yney2fvoxjfqmelekm%2fnhi%3d", "proxy": ""}
+{"timestamp": 1772881585.0935593, "level": "WARNING", "user_id": 1, "message": "Captcha \u00e7\u00f6z\u00fcld\u00fc ancak giri\u015f ba\u015far\u0131l\u0131 olmad\u0131.", "proxy": ""}
+{"timestamp": 1772881585.182266, "level": "INFO", "user_id": 1, "message": "Giri\u015f/\u015eifre Denemesi: 3/3", "proxy": ""}
+{"timestamp": 1772881636.726792, "level": "ERROR", "user_id": 1, "message": "\u015eifre alan\u0131 bulunamad\u0131, yeniden deneniyor...", "proxy": ""}
+{"timestamp": 1772881653.6860576, "level": "ERROR", "user_id": 1, "message": "Giri\u015f ba\u015far\u0131s\u0131z. 60 sn sonra tekrar denenecek.", "proxy": ""}
+{"timestamp": 1772881653.7061217, "level": "INFO", "user_id": 1, "message": "Bot durduruldu.", "proxy": ""}
+{"timestamp": 1772886260.3269637, "level": "INFO", "user_id": 3, "message": "Bot ba\u015flat\u0131l\u0131yor... [Scout Modu: Kapal\u0131]", "proxy": ""}
+{"timestamp": 1772886260.756673, "level": "INFO", "user_id": 3, "message": "Normal (G\u00f6r\u00fcn\u00fcr) Chrome ba\u015flat\u0131l\u0131yor... [UA: Chrome 121.0.3222.63]", "proxy": ""}
+{"timestamp": 1772886268.5035162, "level": "INFO", "user_id": 3, "message": "Stealth JS Enjekte Edildi.", "proxy": ""}
+{"timestamp": 1772886268.8566587, "level": "INFO", "user_id": 3, "message": "Chrome WebDriver ba\u015flat\u0131ld\u0131 (Network Loglama Aktif)", "proxy": ""}
+{"timestamp": 1772886273.588725, "level": "INFO", "user_id": 3, "message": "Giri\u015f yap\u0131l\u0131yor...", "proxy": ""}
+{"timestamp": 1772886277.5814092, "level": "INFO", "user_id": 3, "message": "G\u00f6r\u00fcn\u00fcr input say\u0131s\u0131: 1", "proxy": ""}
+{"timestamp": 1772886277.9327397, "level": "INFO", "user_id": 3, "message": "Email girildi: bartu.colak1@outlook.com", "proxy": ""}
+{"timestamp": 1772886279.4119506, "level": "INFO", "user_id": 3, "message": "Verify t\u0131klan\u0131yor...", "proxy": ""}
+{"timestamp": 1772886284.4729366, "level": "INFO", "user_id": 3, "message": "Captcha ve \u015eifre alan\u0131 ayn\u0131 anda tespit edildi. \u00d6nce \u015fifre girilecek...", "proxy": ""}
+{"timestamp": 1772886284.806635, "level": "INFO", "user_id": 3, "message": "\u015eifre sayfas\u0131 bekleniyor... (10.0 sn)", "proxy": ""}
+{"timestamp": 1772886286.6603248, "level": "INFO", "user_id": 3, "message": "Giri\u015f/\u015eifre Denemesi: 1/3", "proxy": ""}
+{"timestamp": 1772886288.7895942, "level": "INFO", "user_id": 3, "message": "\u015eifre girildi", "proxy": ""}
+{"timestamp": 1772886289.8053129, "level": "INFO", "user_id": 3, "message": "CAPTCHA \u00e7\u00f6z\u00fcl\u00fcyor (\u015eifre girildi, \u015fimdi Submit edilecek)...", "proxy": ""}
+{"timestamp": 1772886325.5785007, "level": "INFO", "user_id": 3, "message": "Captcha Submit edildi. Sonu\u00e7 bekleniyor...", "proxy": ""}

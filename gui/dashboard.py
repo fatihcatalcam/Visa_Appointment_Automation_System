@@ -363,13 +363,13 @@ class DashboardWindow(ctk.CTk):
             
             users_list = []
             for _, row in df.iterrows():
-                if not row.get("email") or not row.get("password"):
-                    continue # Email ve şifre zorunlu
+                if not row.get("email"):
+                    continue # Sadece Email zorunlu (Şifre boş bırakılabilir)
                     
                 user = {
                     "is_active": True,
                     "email": str(row.get("email")).strip(),
-                    "password": str(row.get("password")).strip(),
+                    "password": str(row.get("password", "")).strip() if "password" in row and pd.notnull(row.get("password")) else "",
                     "first_name": str(row.get("first_name", "")).strip(),
                     "last_name": str(row.get("last_name", "")).strip(),
                     "phone": str(row.get("phone", "")).strip(),
@@ -382,6 +382,7 @@ class DashboardWindow(ctk.CTk):
                     "minimum_days": int(row.get("minimum_days", 0) if row.get("minimum_days") is not None else 0),
                     "check_interval": int(row.get("check_interval", 60) if row.get("check_interval") is not None else 60),
                     "proxy_address": str(row.get("proxy_address", "")).strip() if row.get("proxy_address") else "",
+                    "email_app_password": str(row.get("email_app_password", "")).strip() if "email_app_password" in row else "",
                     "headless": True,
                     "status": "Idle"
                 }
@@ -422,13 +423,14 @@ class DashboardWindow(ctk.CTk):
             for u in users:
                 u_copy = dict(u) # copy for editing
                 u_copy['password'] = _simple_decode(u_copy.get('password_enc', ''))
+                u_copy['email_app_password'] = u_copy.get('email_app_password', '') # Her halükarda sütun eklensin
                 # Hide internal IDs and states if needed, but keeping them allows a cleaner backup
                 export_data.append(u_copy)
                 
             df = pd.DataFrame(export_data)
             
             # Sütun sırasını düzenle (Okunabilirlik için)
-            cols = ["id", "is_active", "email", "password", "first_name", "last_name", "phone", 
+            cols = ["id", "is_active", "email", "password", "email_app_password", "first_name", "last_name", "phone", 
                     "jurisdiction", "location", "category", "visa_type", "visa_sub_type", 
                     "appointment_for", "minimum_days", "check_interval", "proxy_address", "status", "last_check", "error_msg", "cooldown_until"]
             

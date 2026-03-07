@@ -32,10 +32,11 @@ env/
 logs/
 
 # ========================
-# Güvenlik / Secrets
+# Güvenlik / Secrets / Caches
 # ========================
 data/.secret_key
 data/sessions/
+data/profiles/
 *.xlsx
 
 # ========================

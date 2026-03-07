@@ -138,14 +138,20 @@ from config.database import bulk_add_users, _simple_decode
 
 @router.get("/export/excel", summary="Export all users to an Excel spreadsheet")
 def export_excel():
+    from config.database import _simple_decode
     users = UserRepository.get_all()
     if not users:
         raise HTTPException(status_code=404, detail="No users found to export")
     
-    export_data = [dict(u) for u in users]
+    export_data = []
+    for u in users:
+        u_copy = dict(u)
+        u_copy['password'] = _simple_decode(u_copy.get('password_enc', ''))
+        u_copy['email_app_password'] = u_copy.get('email_app_password', '')
+        export_data.append(u_copy)
         
     df = pd.DataFrame(export_data)
-    cols = ["id", "is_active", "email", "first_name", "last_name", "phone", 
+    cols = ["id", "is_active", "email", "password", "email_app_password", "first_name", "last_name", "phone", 
             "jurisdiction", "location", "category", "visa_type", "visa_sub_type", 
             "appointment_for", "minimum_days", "check_interval", "proxy_address", "status", "last_check", "error_msg", "cooldown_until"]
     cols = [c for c in cols if c in df.columns]
@@ -173,13 +179,13 @@ async def import_excel(file: UploadFile = File(...)):
         
         users_list = []
         for _, row in df.iterrows():
-            if not row.get("email") or not row.get("password"):
-                continue # Email ve şifre zorunlu
+            if not row.get("email"):
+                continue # Sadece Email zorunlu (Şifre boş bırakılabilir)
                 
             user = {
                 "is_active": True,
                 "email": str(row.get("email")).strip(),
-                "password": str(row.get("password")).strip(),
+                "password": str(row.get("password", "")).strip() if "password" in row and pd.notnull(row.get("password")) else "",
                 "first_name": str(row.get("first_name", "")).strip(),
                 "last_name": str(row.get("last_name", "")).strip(),
                 "phone": str(row.get("phone", "")).strip(),
@@ -192,6 +198,7 @@ async def import_excel(file: UploadFile = File(...)):
                 "minimum_days": int(row.get("minimum_days", 0) if row.get("minimum_days") is not None else 0),
                 "check_interval": int(row.get("check_interval", 60) if row.get("check_interval") is not None else 60),
                 "proxy_address": str(row.get("proxy_address", "")).strip() if row.get("proxy_address") else "",
+                "email_app_password": str(row.get("email_app_password", "")).strip() if "email_app_password" in row else "",
                 "headless": True,
                 "status": "Idle"
             }
@@ -201,7 +208,7 @@ async def import_excel(file: UploadFile = File(...)):
             bulk_add_users(users_list)
             return {"status": "success", "message": f"{len(users_list)} users imported successfully", "imported": len(users_list)}
         else:
-            raise HTTPException(status_code=400, detail="No valid users found in spreadsheet (email and password required)")
+            raise HTTPException(status_code=400, detail="No valid users found in spreadsheet. (An 'email' column with at least 1 email address is required)")
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error importing Excel: {str(e)}")

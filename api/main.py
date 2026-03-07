@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routers import workers, proxies, system
 from api.auth import verify_api_key
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +36,13 @@ app = FastAPI(
 )
 
 # CORS configuration - Restricted to local dev server origins
+default_cors = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
+cors_str = os.getenv("CORS_ORIGINS", default_cors)
+allow_origins_list = [origin.strip() for origin in cors_str.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=allow_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

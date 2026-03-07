@@ -2,8 +2,11 @@ import requests
 import logging
 import threading
 import time
-import winsound
-from tkinter import messagebox
+try:
+    import winsound
+except ImportError:
+    winsound = None
+# tkinter removed for headless VPS compatibility
 try:
     from plyer import notification
 except ImportError:
@@ -102,10 +105,13 @@ class Notifier:
     def _alarm_loop(self):
         while self._alarm_active:
             try:
-                winsound.Beep(1000, 500)  # 1000 Hz, 500 ms
-                time.sleep(0.5)
-                winsound.Beep(1500, 500)
-                time.sleep(0.5)
+                if winsound:
+                    winsound.Beep(1000, 500)  # 1000 Hz, 500 ms
+                    time.sleep(0.5)
+                    winsound.Beep(1500, 500)
+                    time.sleep(0.5)
+                else:
+                    time.sleep(1)
             except:
                 break
 

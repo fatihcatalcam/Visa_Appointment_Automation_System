@@ -69,9 +69,23 @@ class LoginManager:
 
     def load_cookies(self) -> bool:
         """Load saved cookies and verify session validity."""
-        if not self.driver or not os.path.exists(self._session_file):
+        if not self.driver:
             return False
+            
         try:
+            # 1. Önce native tarayıcı profilinin (user-data-dir) oturumunu kontrol et
+            self.driver.get(APPOINTMENT_URL)
+            time.sleep(3)
+            current_url = self.driver.current_url.lower()
+            if 'login' not in current_url and 'account' not in current_url:
+                self._log(logging.INFO, "✅ Native Profil oturumu geçerli! Login atlanıyor.")
+                self.is_logged_in = True
+                return True
+                
+            # 2. Native oturum yoksa, JSON olarak kaydedilmiş yedeği dene
+            if not os.path.exists(self._session_file):
+                return False
+                
             self.driver.get(LOGIN_URL)
             time.sleep(2)
             with open(self._session_file, 'r', encoding='utf-8') as f:
@@ -83,19 +97,22 @@ class LoginManager:
                     self.driver.add_cookie(cookie)
                 except Exception:
                     pass
-            self._log(logging.INFO, f"🔍 {len(cookies)} cookie yüklendi, oturum kontrol ediliyor...")
+                    
+            self._log(logging.INFO, f"🔍 {len(cookies)} yedek cookie yüklendi, oturum tekrar kontrol ediliyor...")
             self.driver.get(APPOINTMENT_URL)
             time.sleep(3)
             current_url = self.driver.current_url.lower()
+            
             if 'login' not in current_url and 'account' not in current_url:
-                self._log(logging.INFO, "✅ Cookie oturumu geçerli! Login atlanıyor.")
+                self._log(logging.INFO, "✅ Yedek JSON Cookie oturumu geçerli! Login atlanıyor.")
                 self.is_logged_in = True
                 return True
             else:
-                self._log(logging.INFO, "❌ Cookie oturumu süresi dolmuş. Normal login yapılacak.")
+                self._log(logging.INFO, "❌ Tüm oturumlar sona ermiş. Normal login yapılacak.")
                 return False
+                
         except Exception as e:
-            self._log(logging.DEBUG, f"Cookie yükleme hatası: {e}")
+            self._log(logging.DEBUG, f"Oturum doğrulama hatası: {e}")
             return False
 
     # ─── Field Discovery ────────────────────────────────────────────────────

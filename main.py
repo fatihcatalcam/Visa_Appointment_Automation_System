@@ -18,7 +18,9 @@ def start_api_server(bot_manager):
     fastapi_app.state.bot_manager = bot_manager
     logging.info("Starting REST API Server on port 8000...")
     # NOTE: run uvicorn programmatically
-    uvicorn.run(fastapi_app, host="127.0.0.1", port=8000, log_level="warning")
+    api_host = os.getenv("API_HOST", "0.0.0.0")
+    api_port = int(os.getenv("API_PORT", "8000"))
+    uvicorn.run(fastapi_app, host=api_host, port=api_port, log_level="warning")
 
 def start_frontend():
     """Starts the Vite React/Vue frontend server automatically on port 5173"""

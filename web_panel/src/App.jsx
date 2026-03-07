@@ -41,7 +41,8 @@ function App() {
   const [showNotifications, setShowNotifications] = useState(false)
 
   useEffect(() => {
-    const ws = new WebSocket(`ws://127.0.0.1:8000/api/v1/system/ws/logs`)
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/api/v1/system/ws/logs`)
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data)
       if (data.logs) {

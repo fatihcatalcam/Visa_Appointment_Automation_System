@@ -6,6 +6,7 @@ BLS sitesindeki CAPTCHA: 3x3 grid, her kutuda renkli/stilize sayı var.
 "Please select all boxes with number XXX" → hedef sayıyla eşleşen kutuları tıkla.
 """
 
+import os
 import io
 import re
 import logging
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 TESSERACT_PATHS = [
     r"C:\Program Files\Tesseract-OCR\tesseract.exe",
     r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-    r"C:\Users\Fatih\AppData\Local\Programs\Tesseract-OCR\tesseract.exe",
+    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Tesseract-OCR", "tesseract.exe"),
 ]
 
 
@@ -745,7 +746,12 @@ class CaptchaSolver:
                 if not grid_img: continue
                 
                 # Debug
-                try: grid_img.save("last_captcha_grid.png")
+                try:
+                    import os
+                    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    log_dir = os.path.join(base_dir, "logs")
+                    os.makedirs(log_dir, exist_ok=True)
+                    grid_img.save(os.path.join(log_dir, "last_captcha_grid.png"))
                 except: pass
 
                 # Bytes

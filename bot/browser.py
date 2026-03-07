@@ -58,6 +58,12 @@ class BrowserFactory:
         Returns True on success, False on failure."""
         try:
             ua, res = self.generate_fingerprint()
+            
+            # Persistent Profile Session Dir
+            import os
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            profile_dir = os.path.join(base_dir, "data", "profiles", str(self.user_data.get("id", "default")))
+            os.makedirs(profile_dir, exist_ok=True)
 
             if self.headless:
                 self._log(logging.INFO, f"Gizli (Stealth Headless) modda başlatılıyor... [UA: Chrome {ua.split('Chrome/')[1].split(' ')[0]}]")
@@ -70,14 +76,23 @@ class BrowserFactory:
                 version_main = None
                 try:
                     import subprocess
-                    reg_result = subprocess.run(
-                        ['reg', 'query', r'HKEY_CURRENT_USER\Software\Google\Chrome\BLBeacon', '/v', 'version'],
-                        capture_output=True, text=True, timeout=5
-                    )
-                    match = re.search(r'(\d+)\.', reg_result.stdout)
-                    if match:
-                        version_main = int(match.group(1))
-                        self._log(logging.INFO, f"Chrome v{version_main} algılandı, uyumlu driver kullanılacak.")
+                    reg_paths = [
+                        r'HKEY_CURRENT_USER\Software\Google\Chrome\BLBeacon',
+                        r'HKEY_LOCAL_MACHINE\SOFTWARE\Google\Chrome\BLBeacon',
+                    ]
+                    for reg_path in reg_paths:
+                        try:
+                            reg_result = subprocess.run(
+                                ['reg', 'query', reg_path, '/v', 'version'],
+                                capture_output=True, text=True, timeout=5
+                            )
+                            match = re.search(r'(\d+)\.', reg_result.stdout)
+                            if match:
+                                version_main = int(match.group(1))
+                                self._log(logging.INFO, f"Chrome v{version_main} algılandı ({reg_path}), uyumlu driver kullanılacak.")
+                                break
+                        except Exception:
+                            continue
                 except Exception:
                     pass
 
@@ -110,7 +125,7 @@ class BrowserFactory:
                     options.add_argument("--enable-javascript")
 
                     try:
-                        kwargs = {"options": options, "headless": True, "use_subprocess": True}
+                        kwargs = {"options": options, "headless": True, "use_subprocess": True, "user_data_dir": profile_dir}
                         if version_main:
                             kwargs["version_main"] = version_main
                         self.driver = uc.Chrome(**kwargs)
@@ -148,6 +163,7 @@ class BrowserFactory:
                 options.add_experimental_option("excludeSwitches", ["enable-automation"])
                 options.add_experimental_option("useAutomationExtension", False)
                 options.add_argument(f"--window-size={res}")
+                options.add_argument(f"--user-data-dir={profile_dir}")
                 options.add_argument(f"user-agent={ua}")
                 self.driver = webdriver.Chrome(options=options)
 
@@ -216,8 +232,14 @@ class BrowserFactory:
                         filtered_logs.append(msg)
                 except Exception:
                     pass
-            with open("network_activity.json", "w", encoding="utf-8") as f:
+            import os
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            log_dir = os.path.join(base_dir, "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            log_file_path = os.path.join(log_dir, "network_activity.json")
+            
+            with open(log_file_path, "w", encoding="utf-8") as f:
                 json.dump(filtered_logs, f, indent=2)
-            logger.info(f"✅ Network logları kaydedildi: network_activity.json ({len(filtered_logs)} olay)")
+            logger.info(f"✅ Network logları kaydedildi: {log_file_path} ({len(filtered_logs)} olay)")
         except Exception as e:
             logger.error(f"Log dump hatası: {e}")

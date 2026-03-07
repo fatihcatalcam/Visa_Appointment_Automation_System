@@ -1717,7 +1717,11 @@ class BLSScraper:
                     """)
                     
                     if has_file_input:
-                        stock_photo_path = os.path.join(os.getcwd(), "test_photo.jpg")
+                        import os
+                        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                        log_dir = os.path.join(base_dir, "logs")
+                        os.makedirs(log_dir, exist_ok=True)
+                        stock_photo_path = os.path.join(log_dir, "test_photo.jpg")
                         
                         # Kullanıcının 200KB altı, tam siyah düzgün bir fotoğraf talebi (Pillow ile)
                         try:
@@ -1860,7 +1864,7 @@ class BLSScraper:
                             def otp_log_hook(lvl, msg):
                                 self._log(lvl, f"  [OTP] {msg}")
 
-                            reader = OTPReader(email_address, app_password, log_func=otp_log_hook)
+                            reader = OTPReader(email_address, app_password, log_func=otp_log_hook, target_email=self.user_data.get("email"))
                             otp_code = reader.wait_for_otp(timeout=180, poll_interval=10)
                                 
                             if otp_code:

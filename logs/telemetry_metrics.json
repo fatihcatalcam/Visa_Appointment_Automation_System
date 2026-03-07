@@ -9170,3 +9170,83 @@
 {"timestamp": 1772837147.0936363, "level": "ERROR", "user_id": 2, "message": "Takvim okuma hatas\u0131: Message: invalid session id\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff65264aa55\n\t0x7ff6523a8630\n\t0x7ff65213d546\n\t0x7ff652188113\n\t0x7ff6521c18e2\n\t0x7ff6521bbb11\n\t0x7ff6521badc3\n\t0x7ff652106505\n\t0x7ff652677810\n\t0x7ff652671afd\n\t0x7ff652692c1a\n\t0x7ff6523c3345\n\t0x7ff6523cb81c\n\t0x7ff65210536a\n\t0x7ff6527d2b08\n\t0x7ffac5bee8d7\n\t0x7ffac678c40c\n", "proxy": ""}
 {"timestamp": 1772837147.3249938, "level": "INFO", "user_id": 2, "message": "M\u00fcsait randevu bulunamad\u0131 (Premium)", "proxy": ""}
 {"timestamp": 1772837147.8055959, "level": "INFO", "user_id": 2, "message": "Randevu yok. Neden: M\u00fcsait randevu yok", "proxy": ""}
+{"timestamp": 1772837222.0295663, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131na gidiliyor...", "proxy": ""}
+{"timestamp": 1772837222.381439, "level": "INFO", "user_id": 2, "message": "Randevu yok. Neden: Taray\u0131c\u0131 hatas\u0131: Message: invalid session id\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff6", "proxy": ""}
+{"timestamp": 1772837292.5941284, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131na gidiliyor...", "proxy": ""}
+{"timestamp": 1772837293.0297241, "level": "INFO", "user_id": 2, "message": "Randevu yok. Neden: Taray\u0131c\u0131 hatas\u0131: Message: invalid session id\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff6", "proxy": ""}
+{"timestamp": 1772837382.14904, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131na gidiliyor...", "proxy": ""}
+{"timestamp": 1772837382.6846182, "level": "INFO", "user_id": 2, "message": "Randevu yok. Neden: Taray\u0131c\u0131 hatas\u0131: Message: invalid session id\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff6", "proxy": ""}
+{"timestamp": 1772837454.7825522, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131na gidiliyor...", "proxy": ""}
+{"timestamp": 1772837455.229569, "level": "INFO", "user_id": 2, "message": "Randevu yok. Neden: Taray\u0131c\u0131 hatas\u0131: Message: invalid session id\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff6", "proxy": ""}
+{"timestamp": 1772837537.5065985, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131na gidiliyor...", "proxy": ""}
+{"timestamp": 1772837537.9052722, "level": "INFO", "user_id": 2, "message": "Randevu yok. Neden: Taray\u0131c\u0131 hatas\u0131: Message: invalid session id\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff6", "proxy": ""}
+{"timestamp": 1772837590.9766483, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131na gidiliyor...", "proxy": ""}
+{"timestamp": 1772837591.1662524, "level": "INFO", "user_id": 2, "message": "Randevu yok. Neden: Taray\u0131c\u0131 hatas\u0131: Message: invalid session id\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff6", "proxy": ""}
+{"timestamp": 1772837677.2811213, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131na gidiliyor...", "proxy": ""}
+{"timestamp": 1772837677.9090664, "level": "INFO", "user_id": 2, "message": "Randevu yok. Neden: Taray\u0131c\u0131 hatas\u0131: Message: invalid session id\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff6", "proxy": ""}
+{"timestamp": 1772837741.9978237, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131na gidiliyor...", "proxy": ""}
+{"timestamp": 1772837742.3879006, "level": "INFO", "user_id": 2, "message": "Randevu yok. Neden: Taray\u0131c\u0131 hatas\u0131: Message: invalid session id\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff6", "proxy": ""}
+{"timestamp": 1772837814.4880986, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131na gidiliyor...", "proxy": ""}
+{"timestamp": 1772837815.2285533, "level": "INFO", "user_id": 2, "message": "Randevu yok. Neden: Taray\u0131c\u0131 hatas\u0131: Message: invalid session id\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff6", "proxy": ""}
+{"timestamp": 1772837898.3582237, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131na gidiliyor...", "proxy": ""}
+{"timestamp": 1772837898.6747808, "level": "INFO", "user_id": 2, "message": "Randevu yok. Neden: Taray\u0131c\u0131 hatas\u0131: Message: invalid session id\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff6", "proxy": ""}
+{"timestamp": 1772837970.7943997, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131na gidiliyor...", "proxy": ""}
+{"timestamp": 1772837971.7068975, "level": "INFO", "user_id": 2, "message": "Randevu yok. Neden: Taray\u0131c\u0131 hatas\u0131: Message: invalid session id\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff6", "proxy": ""}
+{"timestamp": 1772838052.8004398, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131na gidiliyor...", "proxy": ""}
+{"timestamp": 1772838053.194079, "level": "INFO", "user_id": 2, "message": "Randevu yok. Neden: Taray\u0131c\u0131 hatas\u0131: Message: invalid session id\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff6", "proxy": ""}
+{"timestamp": 1772838069.126048, "level": "INFO", "user_id": 2, "message": "Durdurma sinyali al\u0131nd\u0131. Chrome kapat\u0131l\u0131yor...", "proxy": ""}
+{"timestamp": 1772838069.568355, "level": "DEBUG", "user_id": 2, "message": "Cookie kaydetme hatas\u0131: Message: invalid session id\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff65264aa55\n\t0x7ff6523a8630\n\t0x7ff65213d546\n\t0x7ff652188113\n\t0x7ff6521c18e2\n\t0x7ff6521bbb11\n\t0x7ff6521badc3\n\t0x7ff652106505\n\t0x7ff652677810\n\t0x7ff652671afd\n\t0x7ff652692c1a\n\t0x7ff6523c3345\n\t0x7ff6523cb81c\n\t0x7ff65210536a\n\t0x7ff6527d2b08\n\t0x7ffac5bee8d7\n\t0x7ffac678c40c\n", "proxy": ""}
+{"timestamp": 1772838072.2098567, "level": "INFO", "user_id": 2, "message": "WebDriver kapat\u0131ld\u0131", "proxy": ""}
+{"timestamp": 1772838086.9649086, "level": "DEBUG", "user_id": 2, "message": "Cookie kaydetme hatas\u0131: HTTPConnectionPool(host='localhost', port=59209): Max retries exceeded with url: /session/ab4ac10125104d7dfec95bcf7aef7888/cookie (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x00000204933423F0>: Failed to establish a new connection: [WinError 10061] Hedef makine etkin olarak reddetti\u011finden ba\u011flant\u0131 kurulamad\u0131'))", "proxy": ""}
+{"timestamp": 1772838086.9791982, "level": "INFO", "user_id": 2, "message": "Bot durduruldu.", "proxy": ""}
+{"timestamp": 1772880461.0844023, "level": "INFO", "user_id": 2, "message": "Bot ba\u015flat\u0131l\u0131yor... [Scout Modu: Kapal\u0131]", "proxy": ""}
+{"timestamp": 1772880461.6276033, "level": "INFO", "user_id": 2, "message": "Normal (G\u00f6r\u00fcn\u00fcr) Chrome ba\u015flat\u0131l\u0131yor... [UA: Chrome 122.0.2863.15]", "proxy": ""}
+{"timestamp": 1772880468.833804, "level": "INFO", "user_id": 2, "message": "Stealth JS Enjekte Edildi.", "proxy": ""}
+{"timestamp": 1772880468.836315, "level": "INFO", "user_id": 2, "message": "Chrome WebDriver ba\u015flat\u0131ld\u0131 (Network Loglama Aktif)", "proxy": ""}
+{"timestamp": 1772880473.5790477, "level": "INFO", "user_id": 2, "message": "\ud83d\udd0d 2 cookie y\u00fcklendi, oturum kontrol ediliyor...", "proxy": ""}
+{"timestamp": 1772880479.2896452, "level": "INFO", "user_id": 2, "message": "\u274c Cookie oturumu s\u00fcresi dolmu\u015f. Normal login yap\u0131lacak.", "proxy": ""}
+{"timestamp": 1772880481.187626, "level": "INFO", "user_id": 2, "message": "Giri\u015f yap\u0131l\u0131yor...", "proxy": ""}
+{"timestamp": 1772880489.7451694, "level": "INFO", "user_id": 2, "message": "G\u00f6r\u00fcn\u00fcr input say\u0131s\u0131: 1", "proxy": ""}
+{"timestamp": 1772880490.9006565, "level": "INFO", "user_id": 2, "message": "Email girildi: fthctlcm@outlook.com", "proxy": ""}
+{"timestamp": 1772880494.2920487, "level": "INFO", "user_id": 2, "message": "Verify t\u0131klan\u0131yor...", "proxy": ""}
+{"timestamp": 1772880504.931786, "level": "INFO", "user_id": 2, "message": "Captcha ve \u015eifre alan\u0131 ayn\u0131 anda tespit edildi. \u00d6nce \u015fifre girilecek...", "proxy": ""}
+{"timestamp": 1772880505.7630205, "level": "INFO", "user_id": 2, "message": "\u015eifre sayfas\u0131 bekleniyor... (10.0 sn)", "proxy": ""}
+{"timestamp": 1772880513.0629594, "level": "INFO", "user_id": 2, "message": "Giri\u015f/\u015eifre Denemesi: 1/3", "proxy": ""}
+{"timestamp": 1772880520.3001575, "level": "INFO", "user_id": 2, "message": "\u015eifre girildi", "proxy": ""}
+{"timestamp": 1772880522.4514499, "level": "INFO", "user_id": 2, "message": "CAPTCHA \u00e7\u00f6z\u00fcl\u00fcyor (\u015eifre girildi, \u015fimdi Submit edilecek)...", "proxy": ""}
+{"timestamp": 1772880630.4821813, "level": "INFO", "user_id": 2, "message": "Captcha Submit edildi. Sonu\u00e7 bekleniyor...", "proxy": ""}
+{"timestamp": 1772880634.1502628, "level": "INFO", "user_id": 2, "message": "\u2705 Giri\u015f ba\u015far\u0131l\u0131! URL: https://turkey.blsspainglobal.com/global/home/index", "proxy": ""}
+{"timestamp": 1772880635.6540673, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131na gidiliyor...", "proxy": ""}
+{"timestamp": 1772880644.150208, "level": "INFO", "user_id": 2, "message": "CAPTCHA algilandi, cozum baslatiliyor...", "proxy": ""}
+{"timestamp": 1772880706.6815598, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131 URL: https://turkey.blsspainglobal.com/Global/Appointment/VisaType?data=sNnU5sgSo04aUoYscdAA2kqk87DIzo%2BKR42xjBdleTIORvAel%2BPGMU83g3EmACj3UpoMviMSObmCazGYCGd3R6u%2FYzNnInw8WcSlDAO0FA6s0t4e4CUja3jgapmQO9%2FfZc4Lkvv9hMDToscMoPjESOAa9nL38kChjnkO46z60Zo91AmBKgz57FxdalzefW04VdtEr%2FBQhSgaeZ5Rmds75mLjK6yr%2FyQ6c6%2FZSLFHoMMq8ZO8EFO2uiG0m0yxeOv%2B4o17fPM%2FL41ThMnLauwgbi9HwrHUkp7a79DXxRMwtAgc6HnUd8fGKiRJkrgo6VZ8", "proxy": ""}
+{"timestamp": 1772880707.1173031, "level": "DEBUG", "user_id": 2, "message": "Sayfa i\u00e7eri\u011fi (ilk 500): Apply for VISA to Spain In Turkey\nFollow us on\n\ud835\udd4f\nEnglish\nBook New Appointment\nApplication Status\nManage Appointments\nInsuarance\nBook New Appointment - Visa Type Selection\nApplicants are responsible for taking appointments as per their Jurisdiction.\nYour visa application will not be accepted if your place of residence is out of the consular jurisdiction of the Consulate where you intend to apply\nJurisdiction*\n--Select--\nCategory*\n--Select--\nLocation*\n--Select--\nVisa Type*\n--Select--\nVisa Sub Type", "proxy": ""}
+{"timestamp": 1772880707.654737, "level": "INFO", "user_id": 2, "message": "--- Kategori Kontrol Ediliyor: Premium ---", "proxy": ""}
+{"timestamp": 1772880726.1830559, "level": "INFO", "user_id": 2, "message": "  Form sonras\u0131 CAPTCHA kontrol\u00fc yap\u0131l\u0131yor...", "proxy": ""}
+{"timestamp": 1772880729.7540753, "level": "INFO", "user_id": 2, "message": "  \u2705 Ekranda CAPTCHA kalmad\u0131, takvim aran\u0131yor...", "proxy": ""}
+{"timestamp": 1772880730.0350678, "level": "INFO", "user_id": 2, "message": "Takvimde ye\u015fil (m\u00fcsait) g\u00fcnler aran\u0131yor...", "proxy": ""}
+{"timestamp": 1772880731.1792908, "level": "INFO", "user_id": 2, "message": "  [NATIVE JS] G\u00f6r\u00fcn\u00fcr takvim ikonu aran\u0131yor ve t\u0131klan\u0131yor...", "proxy": ""}
+{"timestamp": 1772880734.246323, "level": "WARNING", "user_id": 2, "message": "Takvim animasyonu uzun s\u00fcrd\u00fc veya takvim UI'\u0131 saptanamad\u0131.", "proxy": ""}
+{"timestamp": 1772880734.760285, "level": "INFO", "user_id": 2, "message": "  Taranan Ay: Mevcut + 0", "proxy": ""}
+{"timestamp": 1772880734.7734125, "level": "DEBUG", "user_id": 2, "message": "Sonraki ay butonu bulunamad\u0131 (veya max limit)", "proxy": ""}
+{"timestamp": 1772880734.7754142, "level": "INFO", "user_id": 2, "message": "M\u00fcsait randevu bulunamad\u0131 (Premium)", "proxy": ""}
+{"timestamp": 1772880734.7796426, "level": "INFO", "user_id": 2, "message": "Randevu yok. Neden: M\u00fcsait randevu yok", "proxy": ""}
+{"timestamp": 1772880788.911577, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131na gidiliyor...", "proxy": ""}
+{"timestamp": 1772880793.461624, "level": "INFO", "user_id": 2, "message": "CAPTCHA algilandi, cozum baslatiliyor...", "proxy": ""}
+{"timestamp": 1772880824.7008004, "level": "INFO", "user_id": 2, "message": "Randevu sayfas\u0131 URL: https://turkey.blsspainglobal.com/Global/appointment/appointmentcaptcha", "proxy": ""}
+{"timestamp": 1772880824.702306, "level": "DEBUG", "user_id": 2, "message": "Sayfa i\u00e7eri\u011fi (ilk 500): Apply for VISA to Spain In Turkey\nFollow us on\n\ud835\udd4f\nEnglish\nBook New Appointment\nApplication Status\nManage Appointments\nInsuarance\nBook New Appointment -\nPlease select all boxes with number 113\nPlease select all boxes with number 410\nPlease select all boxes with number 201\nPlease select all boxes with number 429\nPlease select all boxes with number 227\nPlease select all boxes with number 244\nPlease select all boxes with number 550\nPlease select all boxes with number 725\nPlease select all boxes with ", "proxy": ""}
+{"timestamp": 1772880824.7038276, "level": "INFO", "user_id": 2, "message": "--- Kategori Kontrol Ediliyor: Premium ---", "proxy": ""}
+{"timestamp": 1772880841.4934042, "level": "INFO", "user_id": 2, "message": "  Form sonras\u0131 CAPTCHA kontrol\u00fc yap\u0131l\u0131yor...", "proxy": ""}
+{"timestamp": 1772880844.65623, "level": "INFO", "user_id": 2, "message": "  \u2705 Ekranda CAPTCHA kalmad\u0131, takvim aran\u0131yor...", "proxy": ""}
+{"timestamp": 1772880844.6587608, "level": "INFO", "user_id": 2, "message": "Takvimde ye\u015fil (m\u00fcsait) g\u00fcnler aran\u0131yor...", "proxy": ""}
+{"timestamp": 1772880845.6796012, "level": "INFO", "user_id": 2, "message": "  [NATIVE JS] G\u00f6r\u00fcn\u00fcr takvim ikonu aran\u0131yor ve t\u0131klan\u0131yor...", "proxy": ""}
+{"timestamp": 1772880848.848032, "level": "WARNING", "user_id": 2, "message": "Takvim animasyonu uzun s\u00fcrd\u00fc veya takvim UI'\u0131 saptanamad\u0131.", "proxy": ""}
+{"timestamp": 1772880849.7880766, "level": "INFO", "user_id": 2, "message": "  Taranan Ay: Mevcut + 0", "proxy": ""}
+{"timestamp": 1772880850.220768, "level": "DEBUG", "user_id": 2, "message": "Sonraki ay butonu bulunamad\u0131 (veya max limit)", "proxy": ""}
+{"timestamp": 1772880850.386278, "level": "INFO", "user_id": 2, "message": "M\u00fcsait randevu bulunamad\u0131 (Premium)", "proxy": ""}
+{"timestamp": 1772880850.3924031, "level": "INFO", "user_id": 2, "message": "Randevu yok. Neden: M\u00fcsait randevu yok", "proxy": ""}
+{"timestamp": 1772880874.5756538, "level": "INFO", "user_id": 2, "message": "Durdurma sinyali al\u0131nd\u0131. Chrome kapat\u0131l\u0131yor...", "proxy": ""}
+{"timestamp": 1772880874.9068377, "level": "DEBUG", "user_id": 2, "message": "Cookie kaydetme hatas\u0131: Message: invalid session id: session deleted as the browser has closed the connection\nfrom disconnected: not connected to DevTools\n  (Session info: chrome=145.0.7632.117)\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff7d92baa55\n\t0x7ff7d9018630\n\t0x7ff7d8dad75d\n\t0x7ff7d8d98c72\n\t0x7ff7d8dbf015\n\t0x7ff7d8e390e0\n\t0x7ff7d8e55282\n\t0x7ff7d8df9098\n\t0x7ff7d8df9f83\n\t0x7ff7d92e7810\n\t0x7ff7d92e1afd\n\t0x7ff7d9302c1a\n\t0x7ff7d9033345\n\t0x7ff7d903b81c\n\t0x7ff7d9021924\n\t0x7ff7d9021ad6\n\t0x7ff7d9007e47\n\t0x7ffac5bee8d7\n\t0x7ffac678c40c\n", "proxy": ""}
+{"timestamp": 1772880875.8597078, "level": "DEBUG", "user_id": 2, "message": "Cookie kaydetme hatas\u0131: Message: invalid session id\nStacktrace:\nSymbols not available. Dumping unresolved backtrace:\n\t0x7ff7d92baa55\n\t0x7ff7d9018630\n\t0x7ff7d8dad546\n\t0x7ff7d8df8113\n\t0x7ff7d8e318e2\n\t0x7ff7d8e2bb11\n\t0x7ff7d8e2adc3\n\t0x7ff7d8d76505\n\t0x7ff7d92e7810\n\t0x7ff7d92e1afd\n\t0x7ff7d9302c1a\n\t0x7ff7d9033345\n\t0x7ff7d903b81c\n\t0x7ff7d8d7536a\n\t0x7ff7d9442b08\n\t0x7ffac5bee8d7\n\t0x7ffac678c40c\n", "proxy": ""}
+{"timestamp": 1772880878.102672, "level": "INFO", "user_id": 2, "message": "WebDriver kapat\u0131ld\u0131", "proxy": ""}
+{"timestamp": 1772880897.0718207, "level": "INFO", "user_id": 2, "message": "WebDriver kapat\u0131ld\u0131", "proxy": ""}
+{"timestamp": 1772880897.434833, "level": "INFO", "user_id": 2, "message": "Bot durduruldu.", "proxy": ""}

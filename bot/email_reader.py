@@ -46,10 +46,11 @@ class OTPReader:
         # otp = "986501"
     """
     
-    def __init__(self, email_address: str, app_password: str, imap_server: str = None, log_func=None):
+    def __init__(self, email_address: str, app_password: str, imap_server: str = None, log_func=None, target_email: str = None):
         self.email_address = email_address
         self.app_password = app_password
         self.imap_server = imap_server or _detect_imap_server(email_address)
+        self.target_email = target_email
         self._mail = None
         self._log = log_func or (lambda lvl, msg: logger.log(lvl, msg))
     
@@ -141,6 +142,14 @@ class OTPReader:
                         # E-mail body'sini al
                         body = self._get_email_body(msg)
                         if not body:
+                            continue
+                            
+                        # 🚨 CATCH-ALL FİLTRESİ 🚨
+                        # Havuz maile düşen diğer hesapların (eşzamanlı çalışan threadlerin)
+                        # OTP'lerini yanlışlıkla almamak için mailin body'sinde asıl
+                        # hedef mail adresinin geçip geçmediğini kontrol et ("Dear test@mail.com" vs)
+                        if self.target_email and self.target_email.lower() not in body.lower():
+                            self._log(logging.DEBUG, f"Atlanan Mail: Body içinde hedef '{self.target_email}' bulunamadı.")
                             continue
                         
                         # OTP kodunu bul (6 haneli sayı)

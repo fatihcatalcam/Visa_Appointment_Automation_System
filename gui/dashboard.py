@@ -273,18 +273,10 @@ class DashboardWindow(ctk.CTk):
                 self._refresh_table()
 
     def _setup_logging(self):
-        class QueueHandler(logging.Handler):
-            def __init__(self, queue):
-                super().__init__()
-                self.queue = queue
-            def emit(self, record):
-                self.queue.put(record)
-                
-        logger = logging.getLogger()
-        logger.setLevel(logging.INFO)
-        # C1: Guard against duplicate handler registration (prevents double-logging)
-        if not any(isinstance(h, QueueHandler) for h in logger.handlers):
-            logger.addHandler(QueueHandler(self.log_queue))
+        # We NO LONGER attach a QueueHandler to the root Python logger.
+        # Why? Because WorkerThread already puts its user-facing logs directly into self.log_queue!
+        # By removing this, we prevent Uvicorn, FastAPI, and system logs from flooding the Tkinter UI.
+        pass
 
     def _poll_logs(self):
         import time
@@ -307,6 +299,10 @@ class DashboardWindow(ctk.CTk):
                 self.log_text.configure(state="disabled")
         except queue.Empty:
             pass
+        except Exception as e:
+            print(f"[UI LOG HATASI] Hata oluştu: {repr(e)}")
+            import traceback
+            traceback.print_exc()
         finally:
             self.after(100, self._poll_logs)
 

@@ -439,23 +439,10 @@ class BotManager:
         self._semaphore = threading.Semaphore(max_w)
         self._max_workers = max_w
 
-        # FIX: Attach a handler to the root logger so ALL logging.info/warning/error
-        # calls system-wide are forwarded to log_fan_out → WebSocket → web panel.
-        # Without this, only WorkerThread._log() and BotManager._sys_log() reached
-        # log_fan_out, leaving the web panel "System Logs" empty.
-        class _FanOutHandler(logging.Handler):
-            """Bridges Python logging to LogFanOut for WebSocket consumers."""
-            def __init__(self, fan_out):
-                super().__init__()
-                self._fan_out = fan_out
-            def emit(self, record):
-                self._fan_out.push(record)
-
-        root_logger = logging.getLogger()
-        root_logger.setLevel(logging.INFO)
-        # Guard against duplicate handler registration (hot-reload / multiple instances)
-        if not any(isinstance(h, _FanOutHandler) for h in root_logger.handlers):
-            root_logger.addHandler(_FanOutHandler(self.log_fan_out))
+        # NOTE: We intentionally do NOT attach a handler to the root logger.
+        # WorkerThread._log() and BotManager._sys_log() push directly to log_fan_out,
+        # so only bot-relevant logs reach the Web UI. Adding a root handler would cause
+        # duplication AND flood the panel with uvicorn/access/system noise.
 
         logger.info(f"🔧 BotManager initialized — max_workers={max_w}")
 

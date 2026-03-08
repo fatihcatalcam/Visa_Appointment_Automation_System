@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request
 from data.repositories import GlobalSettingsRepository
 from config.cache import redis_manager
 import time
+import logging
 
 router = APIRouter()
 
@@ -143,8 +144,17 @@ import asyncio
 async def websocket_logs(websocket: WebSocket):
     """Streams logs via non-destructive LogFanOut (P3: multiple consumers can read independently)."""
     await websocket.accept()
-    bot_manager = websocket.app.state.bot_manager
-    last_seq = -1
+    bot_manager = getattr(websocket.app.state, "bot_manager", None)
+    
+    if not bot_manager:
+        await websocket.send_json({"error": "BotManager not initialized"})
+        await websocket.close()
+        return
+    
+    # Send an initial heartbeat so the frontend knows the connection works
+    await websocket.send_json({"logs": [], "connected": True})
+    
+    last_seq = bot_manager.log_fan_out.latest_seq  # Start from current position
     
     try:
         while True:
@@ -161,8 +171,12 @@ async def websocket_logs(websocket: WebSocket):
                         logs.append(log_entry)
                     await websocket.send_json({"logs": logs})
                     last_seq = new_seq
-            except Exception:
-                pass
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                import traceback
+                logging.error(f"WebSocket log streaming error: {e}")
+                traceback.print_exc()
                 
             await asyncio.sleep(0.5) # Poll every 500ms
             

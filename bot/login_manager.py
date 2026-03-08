@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 LOGIN_URL = "https://turkey.blsspainglobal.com/Global/account/login"
 REGISTER_URL = "https://turkey.blsspainglobal.com/Global/account/register"
-APPOINTMENT_URL = "https://turkey.blsspainglobal.com/Global/bls/visatype"
+APPOINTMENT_URL = "https://turkey.blsspainglobal.com/Global/appointment/newappointment"
 
 
 class LoginManager:
@@ -68,52 +68,8 @@ class LoginManager:
             self._log(logging.DEBUG, f"Cookie kaydetme hatası: {e}")
 
     def load_cookies(self) -> bool:
-        """Load saved cookies and verify session validity."""
-        if not self.driver:
-            return False
-            
-        try:
-            # 1. Önce native tarayıcı profilinin (user-data-dir) oturumunu kontrol et
-            self.driver.get(APPOINTMENT_URL)
-            time.sleep(3)
-            current_url = self.driver.current_url.lower()
-            if 'login' not in current_url and 'account' not in current_url:
-                self._log(logging.INFO, "✅ Native Profil oturumu geçerli! Login atlanıyor.")
-                self.is_logged_in = True
-                return True
-                
-            # 2. Native oturum yoksa, JSON olarak kaydedilmiş yedeği dene
-            if not os.path.exists(self._session_file):
-                return False
-                
-            self.driver.get(LOGIN_URL)
-            time.sleep(2)
-            with open(self._session_file, 'r', encoding='utf-8') as f:
-                cookies = json.load(f)
-            for cookie in cookies:
-                cookie.pop('sameSite', None)
-                cookie.pop('storeId', None)
-                try:
-                    self.driver.add_cookie(cookie)
-                except Exception:
-                    pass
-                    
-            self._log(logging.INFO, f"🔍 {len(cookies)} yedek cookie yüklendi, oturum tekrar kontrol ediliyor...")
-            self.driver.get(APPOINTMENT_URL)
-            time.sleep(3)
-            current_url = self.driver.current_url.lower()
-            
-            if 'login' not in current_url and 'account' not in current_url:
-                self._log(logging.INFO, "✅ Yedek JSON Cookie oturumu geçerli! Login atlanıyor.")
-                self.is_logged_in = True
-                return True
-            else:
-                self._log(logging.INFO, "❌ Tüm oturumlar sona ermiş. Normal login yapılacak.")
-                return False
-                
-        except Exception as e:
-            self._log(logging.DEBUG, f"Oturum doğrulama hatası: {e}")
-            return False
+        """Cookie oturumu devre dışı bırakıldı — her zaman login akışına gir."""
+        return False
 
     # ─── Field Discovery ────────────────────────────────────────────────────
 

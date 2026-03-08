@@ -41,29 +41,57 @@ function App() {
   const [showNotifications, setShowNotifications] = useState(false)
 
   useEffect(() => {
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/api/v1/system/ws/logs`)
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data)
-      if (data.logs) {
-        setSysLogs(prev => {
-          const newLogs = [...prev, ...data.logs]
-          return newLogs.slice(-500) // Keep last 500 lines globally
-        })
+    let ws = null
+    let reconnectTimer = null
 
-        setNotifications(prev => {
-          let newNots = [...prev]
-          data.logs.forEach(log => {
-            const mLower = (log?.message || '').toLowerCase()
-            const isErr = log.level === 'ERROR' || log.level === 'WARNING'
-            const isSuccess = mLower.includes('randevu bulundu') || mLower.includes('alındı') || mLower.includes('başarılı')
-            if (isErr || isSuccess) newNots.unshift({ ...log, isError: isErr })
+    const connect = () => {
+      // Connect directly to FastAPI backend (port 8000) for WebSocket.
+      // Vite's HTTP proxy does NOT reliably handle WebSocket upgrade requests.
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const wsHost = window.location.hostname + ':8000'
+      ws = new WebSocket(`${wsProtocol}//${wsHost}/api/v1/system/ws/logs`)
+
+      ws.onopen = () => {
+        console.log('[WS] Connected to log stream')
+      }
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data)
+        if (data.logs && data.logs.length > 0) {
+          setSysLogs(prev => {
+            const newLogs = [...prev, ...data.logs]
+            return newLogs.slice(-500) // Keep last 500 lines globally
           })
-          return newNots.slice(0, 50)
-        })
+
+          setNotifications(prev => {
+            let newNots = [...prev]
+            data.logs.forEach(log => {
+              const mLower = (log?.message || '').toLowerCase()
+              const isErr = log.level === 'ERROR' || log.level === 'WARNING'
+              const isSuccess = mLower.includes('randevu bulundu') || mLower.includes('alındı') || mLower.includes('başarılı')
+              if (isErr || isSuccess) newNots.unshift({ ...log, isError: isErr })
+            })
+            return newNots.slice(0, 50)
+          })
+        }
+      }
+
+      ws.onerror = (err) => {
+        console.error('[WS] WebSocket error:', err)
+      }
+
+      ws.onclose = () => {
+        console.warn('[WS] Connection closed. Reconnecting in 3s...')
+        reconnectTimer = setTimeout(connect, 3000)
       }
     }
-    return () => ws.close()
+
+    connect()
+
+    return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      if (ws) ws.close()
+    }
   }, [])
 
   // Filters
@@ -718,6 +746,11 @@ function AddCustomerModal({ user, onClose, onAdd }) {
           <div className="form-row">
             <div className="form-group"><label>Visa Type</label><input name="visa_type" value={formData.visa_type} onChange={handleChange} /></div>
             <div className="form-group"><label>Category</label><input name="category" value={formData.category} onChange={handleChange} /></div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group"><label>Visa Sub Type</label><input name="visa_sub_type" value={formData.visa_sub_type} onChange={handleChange} /></div>
+            <div className="form-group"><label>Appointment For</label><input name="appointment_for" value={formData.appointment_for} onChange={handleChange} /></div>
           </div>
 
           <div className="form-row">

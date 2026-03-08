@@ -13,13 +13,15 @@ import queue
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize the core task runner with bounded queue (P1: prevent memory leak)
-    log_queue = queue.Queue(maxsize=10000)
-    manager = BotManager(log_queue=log_queue)
-    app.state.bot_manager = manager
-    logger.info("BotManager initialized and bound to app.state")
-    
-    # In the future, this is where we'd start the proxy tester thread, etc.
+    # If the desktop app injected a manager, use it. Otherwise, create a headless one.
+    if not hasattr(app.state, "bot_manager") or app.state.bot_manager is None:
+        log_queue = queue.Queue(maxsize=10000)
+        manager = BotManager(log_queue=log_queue)
+        app.state.bot_manager = manager
+        logger.info("BotManager initialized headlessly via FastAPI lifespan")
+    else:
+        logger.info("BotManager correctly inherited from Desktop GUI injection")
+        
     yield
     
     # Cleanup on shutdown
@@ -32,7 +34,8 @@ app = FastAPI(
     description="Headless backend API for managing workers over VPS.",
     version="1.0.0",
     lifespan=lifespan,
-    dependencies=[Depends(verify_api_key)],
+    # NOTE: Auth intentionally NOT global — WebSocket endpoints cannot send X-API-Key headers.
+    # Auth is applied per-router below instead.
 )
 
 # CORS configuration - Restricted to local dev server origins
@@ -48,9 +51,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include endpoint routers
-app.include_router(workers.router, prefix="/api/v1/workers", tags=["Workers"])
-app.include_router(proxies.router, prefix="/api/v1/proxies", tags=["Proxies"])
+# Include endpoint routers — auth on workers & proxies only, NOT on system (has WebSocket)
+app.include_router(workers.router, prefix="/api/v1/workers", tags=["Workers"], dependencies=[Depends(verify_api_key)])
+app.include_router(proxies.router, prefix="/api/v1/proxies", tags=["Proxies"], dependencies=[Depends(verify_api_key)])
 app.include_router(system.router, prefix="/api/v1/system", tags=["System & Telemetry"])
 
 @app.get("/health", tags=["System & Telemetry"])

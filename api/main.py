@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from api.routers import workers, proxies, system
 from api.auth import verify_api_key
 import logging
@@ -59,6 +60,20 @@ app.include_router(system.router, prefix="/api/v1/system", tags=["System & Telem
 @app.get("/health", tags=["System & Telemetry"])
 def health_check():
     return {"status": "ok", "message": "FastAPI is running"}
+
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from fastapi import Response
+
+@app.get("/metrics", tags=["System & Telemetry"])
+def metrics_root():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+# --- Serve Static Frontend Build ---
+frontend_dist_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web_panel", "dist")
+if os.path.isdir(frontend_dist_path):
+    app.mount("/", StaticFiles(directory=frontend_dist_path, html=True), name="frontend")
+else:
+    logger.warning(f"Frontend dist path not found at {frontend_dist_path}. Please run 'npm run build' inside web_panel/")
 
 def get_bot_manager(request: Request):
     """Dependency injection to get the singleton BotManager instance across all routes"""

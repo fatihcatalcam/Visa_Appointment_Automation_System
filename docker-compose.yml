@@ -4,7 +4,7 @@ services:
     image: redis:alpine
     container_name: comp_bot_redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
@@ -17,7 +17,7 @@ services:
       POSTGRES_PASSWORD: bot_password
       POSTGRES_DB: bot_db
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -26,7 +26,7 @@ services:
     image: prom/prometheus:latest
     container_name: comp_bot_prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     restart: unless-stopped

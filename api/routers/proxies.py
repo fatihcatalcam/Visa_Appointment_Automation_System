@@ -5,7 +5,7 @@ from bot.proxy_manager import proxy_manager
 
 router = APIRouter()
 
-@router.get("/", summary="Return health metrics for all proxies")
+@router.get("", summary="Return health metrics for all proxies")
 def get_proxies():
     """Retrieve all proxies from the repository with their current fail/success counts."""
     return {"proxies": ProxyRepository.get_all()}

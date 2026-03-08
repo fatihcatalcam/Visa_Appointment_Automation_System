@@ -224,7 +224,20 @@ class WorkerThread(threading.Thread):
                 return
 
             # Ana Döngü
+            start_time = time.time()
             while self.running:
+                # B6: Soft-Restart (12 hours) to prevent memory fragmentation
+                if time.time() - start_time > 12 * 3600:
+                    self._log(logging.INFO, "♻️ 12 saatlik kesintisiz çalışma sınırı. Bellek şişmesini önlemek için tarayıcı yeniden başlatılıyor...")
+                    if self.scraper:
+                        try: self.scraper.stop_driver()
+                        except: pass
+                    if not self.scraper.start_driver():
+                        self._log(logging.ERROR, "Soft-restart başarısız oldu. İşçi thread kapatılıyor.")
+                        return
+                    start_time = time.time()
+                    continue
+
                 # 1. Giriş Kontrolü
                 if not self.scraper.is_logged_in:
                     # B2: Try cookie session first (skip login + CAPTCHA)
@@ -445,6 +458,48 @@ class BotManager:
         # duplication AND flood the panel with uvicorn/access/system noise.
 
         logger.info(f"🔧 BotManager initialized — max_workers={max_w}")
+        
+        # Start Profile Cleaner in background
+        threading.Thread(target=self._profile_cleaner_loop, daemon=True).start()
+
+    def _profile_cleaner_loop(self):
+        """Runs once a day to clear bloated Chrome profile caches older than 7 days."""
+        import shutil
+        while True:
+            try:
+                profiles_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "profiles")
+                if os.path.exists(profiles_dir):
+                    now = time.time()
+                    cleaned = 0
+                    for item in os.listdir(profiles_dir):
+                        item_path = os.path.join(profiles_dir, item)
+                        if os.path.isdir(item_path):
+                            # Check age of profile directory
+                            try:
+                                age_days = (now - os.path.getmtime(item_path)) / (3600 * 24)
+                                if age_days > 7:
+                                    shutil.rmtree(item_path, ignore_errors=True)
+                                    cleaned += 1
+                            except Exception:
+                                pass
+                    if cleaned > 0:
+                        self._sys_log(logging.INFO, f"🧹 {cleaned} adet eski Chrome profili temizlendi (Disk tasarrufu).")
+            except Exception as e:
+                self._sys_log(logging.ERROR, f"Profil temizlik hatası: {e}")
+            
+            # Wipe logs older than 7 days too
+            try:
+                logs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+                if os.path.exists(logs_dir):
+                    now = time.time()
+                    for item in os.listdir(logs_dir):
+                        if item.endswith(".log"):
+                            pth = os.path.join(logs_dir, item)
+                            if (now - os.path.getmtime(pth)) / 86400 > 7:
+                                os.remove(pth)
+            except Exception: pass
+            
+            time.sleep(86400) # Check once every 24 hours
 
     def _sys_log(self, level, message):
         """System-level log entry (not tied to any worker)."""

@@ -8,7 +8,7 @@ router = APIRouter()
 def get_bot_manager(request: Request):
     return request.app.state.bot_manager
 
-@router.get("/", summary="Get all workers and their statuses")
+@router.get("", summary="Get all workers and their statuses")
 def get_all_workers():
     """Returns the list of all users/workers from the DB along with live status."""
     return {"workers": UserRepository.get_all()}
@@ -95,7 +95,7 @@ def clear_worker_cooldown(user_id: int):
 from api.models import UserCreateUpdate
 from config.security import _simple_encode
 
-@router.post("/", summary="Add a new user/bot")
+@router.post("", summary="Add a new user/bot")
 def create_worker(user_data: UserCreateUpdate):
     """Creates a new user record in the database."""
     data = user_data.model_dump()

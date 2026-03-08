@@ -68,6 +68,14 @@ def get_telemetry(request: Request):
             
     return metrics
 
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from fastapi import Response
+
+@router.get("/metrics", summary="Export Prometheus metrics")
+def get_prometheus_metrics():
+    """Exposes Prometheus metrics directly through FastAPI on port 8000."""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
 @router.post("/test_notification", summary="Send a test appointment notification")
 def test_notification(request: Request):
     """Simulates finding an appointment and triggers all notification channels."""
@@ -137,12 +145,26 @@ def update_global_settings_bulk(bulk_update: GlobalSettingsBulkUpdate):
         GlobalSettingsRepository.set(key, value)
     return {"status": "success", "message": "Bulk settings updated successfully."}
 
+from fastapi import Depends
+from api.auth import verify_api_key
+
+@router.post("/auth/verify", summary="Verify API Key")
+def verify_admin_login(api_key: str = Depends(verify_api_key)):
+    """Simple endpoint used by Web Panel to verify password. Returns 200 OK if valid."""
+    return {"status": "success"}
+
 from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
 
 @router.websocket("/ws/logs")
-async def websocket_logs(websocket: WebSocket):
+async def websocket_logs(websocket: WebSocket, token: str = None):
     """Streams logs via non-destructive LogFanOut (P3: multiple consumers can read independently)."""
+    from data.repositories import GlobalSettingsRepository
+    stored_key = GlobalSettingsRepository.get("api_key", "").strip()
+    if stored_key and token != stored_key:
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
     bot_manager = getattr(websocket.app.state, "bot_manager", None)
     

@@ -1,46 +1,13 @@
 import sys
 import os
 import subprocess
-import threading
 import uvicorn
 import logging
 
 # Ensure the root directory is in the path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from gui.dashboard import DashboardWindow
 from bot.telemetry import start_telemetry_server
-from api.main import app as fastapi_app
-
-def start_api_server(bot_manager):
-    """Starts the FastAPI Uvicorn server in a background thread and binds the bot_manager"""
-    # Inject the singleton bot_manager into the FastAPI application state
-    fastapi_app.state.bot_manager = bot_manager
-    logging.info("Starting REST API Server on port 8000...")
-    # NOTE: run uvicorn programmatically
-    api_host = os.getenv("API_HOST", "0.0.0.0")
-    api_port = int(os.getenv("API_PORT", "8000"))
-    uvicorn.run(fastapi_app, host=api_host, port=api_port, log_config=None)
-
-def start_frontend():
-    """Starts the Vite React/Vue frontend server automatically on port 5173"""
-    logging.info("Starting Web Frontend (Vite) on port 5173...")
-    frontend_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web_panel")
-    if os.path.exists(frontend_dir):
-        try:
-            # shell=True is needed on Windows to resolve 'npm'
-            subprocess.Popen(
-                "npm run dev", 
-                cwd=frontend_dir, 
-                shell=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP # Windows specific to allow background detach
-            )
-        except Exception as e:
-            logging.error(f"Failed to start frontend: {e}")
-    else:
-        logging.warning(f"Frontend directory not found at {frontend_dir}")
 
 def cleanup_zombie_processes():
     """Kills leftover chrome and chromedriver processes to prevent memory leaks, but strictly targets only bot-created instances."""
@@ -56,19 +23,36 @@ def cleanup_zombie_processes():
     except Exception as e:
         logging.warning(f"Zombi temizleme hatası: {e}")
 
+def ensure_api_key():
+    from data.repositories import GlobalSettingsRepository
+    import secrets
+    import string
+    current_key = GlobalSettingsRepository.get("api_key", "").strip()
+    if not current_key:
+        alphabet = string.ascii_letters + string.digits
+        new_key = ''.join(secrets.choice(alphabet) for i in range(16))
+        GlobalSettingsRepository.set("api_key", new_key)
+        logging.warning("="*60)
+        logging.warning("🔐 YENI WEB PANEL PAROLASI OLUSTURULDU 🔐")
+        logging.warning(f"👉 PAROLA: {new_key}")
+        logging.warning("Lutfen bu parolayi kopyalayip web paneline giris yapin.")
+        logging.warning("="*60)
+    else:
+        logging.info("🔒 Web Panel Güvenliği Aktif. Parola gereklidir.")
+
 if __name__ == "__main__":
+    # Setup basic logging to terminal
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    logging.info("Starting SaaS Bot Control Server (Headless VPS Mode)...")
+    
+    ensure_api_key()
     cleanup_zombie_processes()
+    start_telemetry_server(port=9090) 
     
-    start_telemetry_server(port=9090) # Switched telemetry back to 9090 to avoid 8000 conflict
+    api_host = os.getenv("API_HOST", "0.0.0.0")
+    api_port = int(os.getenv("API_PORT", "8000"))
     
-    # Start the Tkinter App
-    app = DashboardWindow()
-    
-    # Start the React/Vue Frontend UI automatically
-    start_frontend()
-    
-    # Start the FastAPI Server in a background thread, sharing the exact same manager
-    api_thread = threading.Thread(target=start_api_server, args=(app.manager,), daemon=True)
-    api_thread.start()
-    
-    app.mainloop()
+    # We pass the app as an import string, so uvicorn can manage workers/reloading if needed
+    # The lifespan in api.main:app will automatically safely instantiate BotManager()
+    logging.info(f"Starting API Server on {api_host}:{api_port}")
+    uvicorn.run("api.main:app", host=api_host, port=api_port, log_level="info")

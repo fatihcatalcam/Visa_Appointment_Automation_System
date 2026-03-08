@@ -18,7 +18,75 @@ function AnimatedNumber({ value }) {
   return <span ref={nodeRef}>{value}</span>
 }
 
+
+let globalApiKey = localStorage.getItem('admin_api_key') || '';
+let globalSetAuth = null;
+
+const apiFetch = async (url, options = {}) => {
+  const headers = { ...options.headers };
+  if (globalApiKey) headers['X-API-Key'] = globalApiKey;
+  const res = await window.fetch(url, { ...options, headers });
+  if (res.status === 401 && globalSetAuth) {
+    globalSetAuth(false);
+    localStorage.removeItem('admin_api_key');
+  }
+  return res;
+};
+
+function LoginScreen({ onLogin }) {
+  const [key, setKey] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+        const res = await window.fetch(`${API_BASE}/system/auth/verify`, {
+        method: 'POST',
+        headers: { 'X-API-Key': key }
+      });
+      if (res.ok) {
+        onLogin(key);
+      } else {
+        setError('Hatalı API Anahtarı (Parola)');
+      }
+    } catch {
+      setError('Sunucuya bağlanılamadı.');
+    }
+  };
+
+  return (
+    <div className="modal-overlay" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#0f172a', zIndex: 99999 }}>
+      <div className="glass-panel" style={{ padding: '3rem', width: '400px', textAlign: 'center' }}>
+        <h2 style={{fontSize: '1.5rem', marginBottom: '1rem'}}>🔒 Güvenlik Duvarı</h2>
+        <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>VPS yönetici parolasını girin.</p>
+        <form onSubmit={handleSubmit}>
+          <input type="password" value={key} onChange={e => setKey(e.target.value)} placeholder="Parola (API Key)" style={{ width: '100%', padding: '0.8rem', marginBottom: '1rem', borderRadius: '8px', border: '1px solid var(--panel-border)', background: 'rgba(0,0,0,0.3)', color: 'white' }} />
+          {error && <div style={{ color: '#ef4444', marginBottom: '1rem', fontSize: '0.85rem' }}>{error}</div>}
+          <button type="submit" className="btn-primary" style={{ width: '100%', padding: '1rem' }}>Giriş Yap</button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  useEffect(() => {
+    globalSetAuth = setIsAuthenticated;
+    // Auto verify initial key
+    if (globalApiKey) {
+      window.fetch(`${API_BASE}/system/auth/verify`, { method: 'POST', headers: { 'X-API-Key': globalApiKey } })
+        .then(res => { if (res.ok) setIsAuthenticated(true); else { setIsAuthenticated(false); localStorage.removeItem('admin_api_key'); globalApiKey = ''; } })
+        .catch(() => setIsAuthenticated(true)); // Assume ok if network down but key exists
+    }
+  }, []);
+
+  if (!isAuthenticated && !globalApiKey) {
+    return <LoginScreen onLogin={(key) => { globalApiKey = key; localStorage.setItem('admin_api_key', key); setIsAuthenticated(true); }} />;
+  }
+
+
   const [workers, setWorkers] = useState([])
   const [stats, setStats] = useState({ active: 0, waiting: 0, cooldown: 0, stopped: 0 })
   const [sysHealth, setSysHealth] = useState({ healthy_proxies: 0, cooldown_proxies: 0, uptime: '100%' })
@@ -49,7 +117,7 @@ function App() {
       // Vite's HTTP proxy does NOT reliably handle WebSocket upgrade requests.
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
       const wsHost = window.location.hostname + ':8000'
-      ws = new WebSocket(`${wsProtocol}//${wsHost}/api/v1/system/ws/logs`)
+      ws = new WebSocket(`${wsProtocol}//${wsHost}/api/v1/system/ws/logs?token=${globalApiKey}`)
 
       ws.onopen = () => {
         console.log('[WS] Connected to log stream')
@@ -101,7 +169,7 @@ function App() {
   // Fetch initial data
   const fetchData = async () => {
     try {
-      const res = await fetch(`${API_BASE}/workers`)
+      const res = await apiFetch(`${API_BASE}/workers`)
       if (res.ok) {
         const data = await res.json()
         const workerList = data.workers || []
@@ -124,7 +192,7 @@ function App() {
         })
       }
 
-      const healthRes = await fetch(`${API_BASE}/system/telemetry`)
+      const healthRes = await apiFetch(`${API_BASE}/system/telemetry`)
       if (healthRes.ok) {
         const hData = await healthRes.json()
         setSysHealth(hData)
@@ -142,13 +210,13 @@ function App() {
 
   // API Actions
   const handleAction = async (endpoint) => {
-    await fetch(`${API_BASE}/${endpoint}`, { method: 'POST' })
+    await apiFetch(`${API_BASE}/${endpoint}`, { method: 'POST' })
     fetchData()
   }
 
   const deleteWorker = async (id) => {
     if (!confirm("Müşteriyi silmek istediğinize emin misiniz?")) return;
-    await fetch(`${API_BASE}/workers/${id}`, { method: 'DELETE' })
+    await apiFetch(`${API_BASE}/workers/${id}`, { method: 'DELETE' })
     fetchData()
   }
 
@@ -157,8 +225,8 @@ function App() {
     if (action === 'delete' && !confirm(`Seçili ${selectedIds.length} müşteriyi silmek istediğine emin misin?`)) return;
 
     for (const id of selectedIds) {
-      if (action === 'delete') await fetch(`${API_BASE}/workers/${id}`, { method: 'DELETE' })
-      else await fetch(`${API_BASE}/workers/${id}/${action}`, { method: 'POST' })
+      if (action === 'delete') await apiFetch(`${API_BASE}/workers/${id}`, { method: 'DELETE' })
+      else await apiFetch(`${API_BASE}/workers/${id}/${action}`, { method: 'POST' })
     }
     setSelectedIds([])
     fetchData()
@@ -178,7 +246,7 @@ function App() {
     formData.append('file', file)
 
     try {
-      const res = await fetch(`${API_BASE}/workers/import/excel`, { method: 'POST', body: formData })
+      const res = await apiFetch(`${API_BASE}/workers/import/excel`, { method: 'POST', body: formData })
       const data = await res.json()
       if (res.ok) {
         alert(data.message)
@@ -326,7 +394,7 @@ function App() {
                 <button className="btn-emergency" title="DİKKAT: Tüm işlemleri zorla durdurur ve Chrome'u kapatır" onClick={() => handleAction('workers/kill_all')}>🛑 KILL SWITCH</button>
                 <button className="btn-secondary" title="Tüm bildirim kanallarına test mesajı gönderir" onClick={async () => {
                   try {
-                    const res = await fetch(`${API_BASE}/system/test_notification`, { method: 'POST' });
+                    const res = await apiFetch(`${API_BASE}/system/test_notification`, { method: 'POST' });
                     const data = await res.json();
                     const r = data.results || {};
                     const lines = [
@@ -583,7 +651,7 @@ function GlobalSettingsModal({ onClose }) {
   })
 
   useEffect(() => {
-    fetch(`${API_BASE}/system/settings`)
+    apiFetch(`${API_BASE}/system/settings`)
       .then(res => res.json())
       .then(data => { if (data.settings) setSettings(prev => ({ ...prev, ...data.settings })) })
   }, [])
@@ -593,7 +661,7 @@ function GlobalSettingsModal({ onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
-      await fetch(`${API_BASE}/system/settings/bulk`, {
+      await apiFetch(`${API_BASE}/system/settings/bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ settings })
@@ -696,7 +764,7 @@ function AddCustomerModal({ user, onClose, onAdd }) {
       if (user && !payload.password_enc) delete payload.password_enc
       if (user && !payload.email_app_password) delete payload.email_app_password
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: user ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -790,7 +858,7 @@ function ProxyManagerTab() {
 
   const fetchProxies = async () => {
     try {
-      const res = await fetch(`${API_BASE}/proxies`)
+      const res = await apiFetch(`${API_BASE}/proxies`)
       if (res.ok) {
         const data = await res.json()
         setProxies(data.proxies || [])
@@ -807,7 +875,7 @@ function ProxyManagerTab() {
     if (!lines.length) return
 
     try {
-      const res = await fetch(`${API_BASE}/proxies/import`, {
+      const res = await apiFetch(`${API_BASE}/proxies/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(lines)
@@ -824,7 +892,7 @@ function ProxyManagerTab() {
   const deleteProxy = async (address) => {
     if (!confirm("Bu proxy'yi silmek istediğinize emin misiniz?")) return
     try {
-      await fetch(`${API_BASE}/proxies/${encodeURIComponent(address)}`, { method: 'DELETE' })
+      await apiFetch(`${API_BASE}/proxies/${encodeURIComponent(address)}`, { method: 'DELETE' })
       fetchProxies()
     } catch (err) { alert(err.message) }
   }
@@ -892,7 +960,7 @@ function WorkerLogModal({ worker, onClose }) {
 
   useEffect(() => {
     // Fetch individual worker logs when modal opens
-    fetch(`${API_BASE}/system/logs/${worker.id}`)
+    apiFetch(`${API_BASE}/system/logs/${worker.id}`)
       .then(res => res.json())
       .then(data => {
         if (data.logs) {

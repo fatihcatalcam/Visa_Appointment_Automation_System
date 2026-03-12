@@ -745,16 +745,7 @@ class CaptchaSolver:
                 grid_img = self._build_grid_image(cell_images, target_text=instruction_text)
                 if not grid_img: continue
                 
-                # Debug
-                try:
-                    import os
-                    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                    log_dir = os.path.join(base_dir, "logs")
-                    os.makedirs(log_dir, exist_ok=True)
-                    grid_img.save(os.path.join(log_dir, "last_captcha_grid.png"))
-                except: pass
-
-                # Bytes
+                # Bytes (Skipped file save to remove I/O bottleneck)
                 buf = _io.BytesIO()
                 grid_img.save(buf, format="PNG")
                 img_bytes = buf.getvalue()

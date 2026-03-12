@@ -19,14 +19,30 @@ async def lifespan(app: FastAPI):
         log_queue = queue.Queue(maxsize=10000)
         manager = BotManager(log_queue=log_queue)
         app.state.bot_manager = manager
-        logger.info("BotManager initialized headlessly via FastAPI lifespan")
+        
+        # Headless (VPS) modunda Telegram kontrolcüsünü de başlat
+        try:
+            from bot.telegram_controller import TelegramBotDaemon, register_daemon
+            telegram_daemon = TelegramBotDaemon(manager)
+            telegram_daemon.start()
+            register_daemon(telegram_daemon)
+            app.state.telegram_daemon = telegram_daemon
+        except Exception as e:
+            logger.error(f"Telegram daemon başlatılamadı: {e}")
+            
+        logger.info("BotManager and Telegram Daemon initialized headlessly via FastAPI lifespan")
     else:
         logger.info("BotManager correctly inherited from Desktop GUI injection")
         
-    yield
-    
-    # Cleanup on shutdown
-    logger.info("Shutting down BotManager...")
+    try:
+        yield
+    finally:
+        # Cleanup on shutdown
+        logger.info("Shutting down services...")
+        if hasattr(app.state, "telegram_daemon") and app.state.telegram_daemon:
+            app.state.telegram_daemon.stop()
+        if hasattr(app.state, "bot_manager") and app.state.bot_manager:
+            app.state.bot_manager.stop_all()
 
 # The global BotManager instance will be injected here during startup
 # This allows the API to orchestrate the exact same memory space as the Tkinter UI

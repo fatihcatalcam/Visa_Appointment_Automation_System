@@ -55,4 +55,13 @@ if __name__ == "__main__":
     # We pass the app as an import string, so uvicorn can manage workers/reloading if needed
     # The lifespan in api.main:app will automatically safely instantiate BotManager()
     logging.info(f"Starting API Server on {api_host}:{api_port}")
-    uvicorn.run("api.main:app", host=api_host, port=api_port, log_level="info")
+    try:
+        uvicorn.run("api.main:app", host=api_host, port=api_port, log_level="info")
+    except Exception as e:
+        logger.error(f"Uvicorn exit error: {e}")
+    finally:
+        logging.info("")
+        logging.info("==========================================================")
+        logging.info("🛑 UYGULAMA KAPATILDI (Ctrl+C). TÜM İŞLEMLER DURDURULDU. 🛑")
+        logging.info("==========================================================")
+        logging.info("")

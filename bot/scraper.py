@@ -829,21 +829,22 @@ class BLSScraper:
     def _handle_premium_popup(self):
         """Premium kategori seçilince çıkan popup'ı onayla"""
         try:
-            # 1. Popup var mı kontrol et
-            # Genelde class: "modal", "popup", id: "commonModal" veya metin içerir
+            # Hizli kontrol: 4 saniyelik WebDriverWait tum normal formlari yavaslatir.
+            # Eger popup varsa en bastan html icinde belirir.
             page_source = self.driver.page_source.lower()
             if "premium category confirmation" not in page_source and "premium lounge" not in page_source:
                 return 
+
             logger.info("ÄŸÅ¸â€™ Premium Popup tespit edildi! Onaylanıyor...")
-            # 2. Butonu bul (Accept/Onayla) - Genelde yeşil veya 'btn-success'
-            # Screenshot'ta "Accept" yeşil buton
             
-            # Seçiciler
+            # Modal gecis animasyonunu ekarte etmek icin 1 saniye bekle
+            time.sleep(1.0)
+            
+            # Seçiciler - Metni çevirerek büyük küçük harf duyarsız yap
             selectors = [
-                "//button[contains(text(), 'Accept') or contains(text(), 'Kabul')]",
-                "//a[contains(text(), 'Accept') or contains(text(), 'Kabul')]",
-                "//button[contains(@class, 'btn-success')]",
-                "//button[contains(@class, 'btn-primary')]" # Bazen kırmızı 'Reject' primary olabilir, dikkat!
+                "//button[contains(translate(text(), 'ACCEPT', 'accept'), 'accept') or contains(translate(text(), 'KABUL', 'kabul'), 'kabul')]",
+                "//a[contains(translate(text(), 'ACCEPT', 'accept'), 'accept') or contains(translate(text(), 'KABUL', 'kabul'), 'kabul')]",
+                "//button[contains(@class, 'btn-success')]"
             ]
             
             for xpath in selectors:
@@ -853,19 +854,16 @@ class BLSScraper:
                         if not btn.is_displayed(): continue
                         txt = btn.text.lower()
                         
-                        # Danger/Reject olmasın
                         if "reject" in txt or "reddet" in txt or "iptal" in txt: continue
                         
-                        # Accept veya Lounge içeriyorsa bas
                         if "accept" in txt or "kabul" in txt or "ok" in txt or "yes" in txt:
                             logger.info(f"ÄŸÅ¸â€™ Premium Onay butonu tıklandı: {txt}")
                             self.driver.execute_script("arguments[0].click();", btn)
                             time.sleep(1.5)
                             return
                 except: pass
-            
+                
             logger.warning("ÄŸÅ¸â€™ Premium Popup var ama 'Accept' butonu bulunamadı!")
-            
         except Exception as e:
             logger.error(f"  [DEBUG] Handle Premium Popup Hatası: {e}")
             return False

@@ -16,39 +16,46 @@ class ScoutDispatcher:
             return cls._instance
 
     def _init_dispatcher(self):
-        self.is_date_available = False
-        self.available_dates_info = [] # e.g. [{"category": "Tourism", "day": "12"}]
-        self.last_found_time = 0
         self.scout_lock = threading.Lock()
-        
-        # When date is found, we set this event to wake up sleeping workers
-        self.wake_up_event = threading.Event()
+        self.location_state = {}
+        self.location_events = {}
 
-    def report_date_found(self, raw_results):
-        """Scout calls this when it finds dates"""
+    def report_date_found(self, raw_results, location=""):
+        location = location.lower().strip()
         with self.scout_lock:
-            self.is_date_available = True
-            self.available_dates_info = raw_results
-            self.last_found_time = time.time()
-            self.wake_up_event.set() # Wake up all waiting threads
-            logger.info("🎯 DISPATCHER: Date found! Waking up all workers...")
+            if location not in self.location_state:
+                self.location_state[location] = {"is_available": False, "info": [], "last_found": 0}
+                self.location_events[location] = threading.Event()
+                
+            self.location_state[location]["is_available"] = True
+            self.location_state[location]["info"] = raw_results
+            self.location_state[location]["last_found"] = time.time()
+            self.location_events[location].set()
+            logger.info(f"🎯 DISPATCHER: Date found! Waking up {location} workers...")
 
-    def report_no_date(self):
-        """Scout calls this when no dates are found"""
+    def report_no_date(self, location=""):
+        location = location.lower().strip()
         with self.scout_lock:
-            # If a date was found recently, keep it alive for a few minutes so workers have time to book
-            if time.time() - self.last_found_time > 300: # 5 minutes expiry
-                if self.is_date_available:
-                    logger.info("🛑 DISPATCHER: Dates expired. Workers will sleep.")
-                self.is_date_available = False
-                self.available_dates_info = []
-                self.wake_up_event.clear()
+            if location not in self.location_state:
+                 return
+            if time.time() - self.location_state[location]["last_found"] > 300: # 5 minutes expiry
+                if self.location_state[location]["is_available"]:
+                    logger.info(f"🛑 DISPATCHER: Dates expired for {location}. Workers will sleep.")
+                self.location_state[location]["is_available"] = False
+                self.location_state[location]["info"] = []
+                self.location_events[location].clear()
 
-    def wait_for_dates(self, timeout=None):
-        """Workers call this to sleep until dates are available"""
-        if self.is_date_available:
-            return True
-        return self.wake_up_event.wait(timeout=timeout)
+    def wait_for_dates(self, location="", timeout=None):
+        location = location.lower().strip()
+        with self.scout_lock:
+            if location not in self.location_state:
+                self.location_state[location] = {"is_available": False, "info": [], "last_found": 0}
+                self.location_events[location] = threading.Event()
+            
+            if self.location_state[location]["is_available"]:
+                return True
+                
+        return self.location_events[location].wait(timeout=timeout)
 
 # Global singleton instance
 scout_dispatcher = ScoutDispatcher()

@@ -204,6 +204,8 @@ async def websocket_logs(websocket: WebSocket, token: str = None):
             
     except WebSocketDisconnect:
         pass
+    except asyncio.CancelledError:
+        pass
 
 import os
 import json

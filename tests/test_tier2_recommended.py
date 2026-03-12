@@ -75,24 +75,24 @@ class TestT7_ScoutDispatcher:
     def test_dates_survive_immediate_no_date(self):
         d = self._make_dispatcher()
 
-        d.report_date_found([{"category": "Tourism", "day": "12"}])
-        assert d.is_date_available is True
+        d.report_date_found([{"category": "Tourism", "day": "12"}], location="istanbul")
+        assert d.location_state["istanbul"]["is_available"] is True
 
         # Immediately call report_no_date — should NOT clear (within 5-min window)
-        d.report_no_date()
-        assert d.is_date_available is True, "5-min protection window broken"
+        d.report_no_date(location="istanbul")
+        assert d.location_state["istanbul"]["is_available"] is True, "5-min protection window broken"
 
     def test_dates_expire_after_5_minutes(self):
         d = self._make_dispatcher()
 
-        d.report_date_found([{"category": "Tourism", "day": "12"}])
-        assert d.is_date_available is True
+        d.report_date_found([{"category": "Tourism", "day": "12"}], location="istanbul")
+        assert d.location_state["istanbul"]["is_available"] is True
 
         # Simulate 6 minutes passing
-        d.last_found_time = time.time() - 360
+        d.location_state["istanbul"]["last_found"] = time.time() - 360
 
-        d.report_no_date()
-        assert d.is_date_available is False, "Dates did not expire after 5 min"
+        d.report_no_date(location="istanbul")
+        assert d.location_state["istanbul"]["is_available"] is False, "Dates did not expire after 5 min"
 
     def test_waiting_workers_wake_up(self):
         d = self._make_dispatcher()

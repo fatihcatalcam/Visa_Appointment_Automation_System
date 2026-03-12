@@ -193,7 +193,8 @@ class WorkerThread(threading.Thread):
             # If scout mode is enabled globally, and this thread is NOT a scout, it should SLEEP
             scout_mode_global = int(self.global_config.get("scout_mode", 0)) == 1
             if scout_mode_global and not self.is_scout:
-                 self._wait_for_scout(user_id)
+                 jurisdiction = self.user.get("jurisdiction", "").strip()
+                 self._wait_for_scout(user_id, jurisdiction)
                  if not self.running: return # Exited while sleeping
                  
             # Cooldown check
@@ -282,7 +283,8 @@ class WorkerThread(threading.Thread):
                     
                     # Notify Dispatcher if Scout
                     if scout_mode_global and self.is_scout:
-                        scout_dispatcher.report_date_found(result.get("raw_results", []))
+                        jurisdiction = self.user.get("jurisdiction", "").strip()
+                        scout_dispatcher.report_date_found(result.get("raw_results", []), location=jurisdiction)
                     
                     # Bildirimler (Discord/Telegram vs.)
                     self._send_notifications(dates_str)
@@ -317,18 +319,26 @@ class WorkerThread(threading.Thread):
                     UserRepository.update_status(user_id, status="Bekliyor", error_msg=msg, last_check=now_str)
                     
                     if scout_mode_global and self.is_scout:
-                        scout_dispatcher.report_no_date()
+                        jurisdiction = self.user.get("jurisdiction", "").strip()
+                        scout_dispatcher.report_no_date(location=jurisdiction)
                         
                 # 3. Bekleme Süresi -> If we are a normal worker and dates expired, go back to sleep
-                if scout_mode_global and not self.is_scout and not scout_dispatcher.is_date_available:
-                     self._log(logging.INFO, "Randevular tükendi. İşçi bot uyku moduna geçiyor...")
-                     if self.scraper:
-                         try:
-                             self.scraper.stop_driver() # Kapat ki RAM yemesin
-                         except: pass
-                     self._wait_for_scout(user_id)
-                     if not self.running: break
-                     continue # Restart loop to init scraper again
+                if scout_mode_global and not self.is_scout:
+                     jurisdiction = self.user.get("jurisdiction", "").strip()
+                     is_avail = False
+                     with scout_dispatcher.scout_lock:
+                         state = scout_dispatcher.location_state.get(jurisdiction.lower(), {})
+                         is_avail = state.get("is_available", False)
+                         
+                     if not is_avail:
+                         self._log(logging.INFO, f"Randevular tükendi ({jurisdiction}). İşçi bot uyku moduna geçiyor...")
+                         if self.scraper:
+                             try:
+                                 self.scraper.stop_driver() # Kapat ki RAM yemesin
+                             except: pass
+                         self._wait_for_scout(user_id, jurisdiction)
+                         if not self.running: break
+                         continue # Restart loop to init scraper again
                 # Check interval süresini küçük parçalara bölerek bekle (B3: jitter otomatik)
                 
                 # B5: Aktif saat penceresi kontrolü
@@ -411,16 +421,22 @@ class WorkerThread(threading.Thread):
         except Exception as e:
             self._log(logging.ERROR, f"Bildirim hatası: {e}")
 
-    def _wait_for_scout(self, user_id):
+    def _wait_for_scout(self, user_id, jurisdiction):
         """Worker thread sleeps here until ScoutDispatcher wakes it up"""
-        self._log(logging.INFO, "Zzz... İşçi bot uyku modunda. İzcinin randevu bulmasını bekliyor.")
+        self._log(logging.INFO, f"Zzz... İşçi bot uyku modunda. İzcinin {jurisdiction} için randevu bulmasını bekliyor.")
         UserRepository.update_status(user_id, status="Uyku (Scout Bekleniyor)")
         
         while self.running:
             # Wait for event with a timeout so we can still shut down gracefully
-            woke_up = scout_dispatcher.wait_for_dates(timeout=2.0)
-            if woke_up and scout_dispatcher.is_date_available:
-                self._log(logging.INFO, "🚀 İşçi bot uyandırıldı! Randevu akını başlıyor...")
+            woke_up = scout_dispatcher.wait_for_dates(location=jurisdiction, timeout=2.0)
+            
+            is_avail = False
+            with scout_dispatcher.scout_lock:
+                state = scout_dispatcher.location_state.get(jurisdiction.lower(), {})
+                is_avail = state.get("is_available", False)
+                
+            if woke_up and is_avail:
+                self._log(logging.INFO, f"🚀 İşçi bot uyandırıldı! {jurisdiction} aktifleştirildi...")
                 break
 
     def stop(self):
@@ -579,7 +595,9 @@ class BotManager:
             "discord_webhook": GlobalSettingsRepository.get("discord_webhook"),
             "telegram_username": GlobalSettingsRepository.get("telegram_username"),
             "telegram_apikey": GlobalSettingsRepository.get("telegram_apikey"),
-            "scout_mode": GlobalSettingsRepository.get("scout_mode")
+            "telegram_bot_token": GlobalSettingsRepository.get("telegram_bot_token", ""),
+            "telegram_admin_id": GlobalSettingsRepository.get("telegram_admin_id", ""),
+            "scout_mode": GlobalSettingsRepository.get("scout_mode", "0")
         }
         
         with self._lock:

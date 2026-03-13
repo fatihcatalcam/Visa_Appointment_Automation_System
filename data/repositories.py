@@ -73,8 +73,8 @@ class UserRepository:
                     """INSERT INTO users (is_active, email, password_enc, first_name, last_name, phone, jurisdiction, 
                                           location, category, appointment_for, visa_type, visa_sub_type, proxy_address, 
                                           check_interval, minimum_days, headless, is_scout, auto_book, status, last_check, check_count, 
-                                          error_msg, cooldown_until, email_app_password, travel_date)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                          error_msg, cooldown_until, email_app_password, travel_date, max_appointment_date)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                        RETURNING id
                     """,
                     (
@@ -88,7 +88,8 @@ class UserRepository:
                         bool(user_data.get('auto_book', False)), user_data.get('status', 'Idle'),
                         user_data.get('last_check'), user_data.get('check_count', 0),
                         user_data.get('error_msg'), user_data.get('cooldown_until'),
-                        enc_email_pwd, user_data.get('travel_date', '')
+                        enc_email_pwd, user_data.get('travel_date', ''),
+                        user_data.get('max_appointment_date', '')
                     )
                 )
                 return cur.fetchone()[0]

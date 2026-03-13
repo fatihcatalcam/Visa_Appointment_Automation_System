@@ -352,6 +352,17 @@ class BLSScraper:
                 
                 # Müsait tarih kontrolü
                 available_dates = self._find_available_dates()
+                
+                # max_appointment_date filtresi: belirlenen tarihten sonraki slotları at
+                max_date_str = self.user_data.get("max_appointment_date", "") or ""
+                max_date_str = max_date_str.strip()
+                if max_date_str and available_dates:
+                    before_count = len(available_dates)
+                    available_dates = self._filter_dates_by_max(available_dates, max_date_str)
+                    filtered_count = before_count - len(available_dates)
+                    if filtered_count > 0:
+                        self._log(logging.INFO, f"  📅 {filtered_count} tarih, son randevu limiti ({max_date_str}) nedeniyle elendi.")
+                
                 if available_dates:
                     self._log(logging.INFO, f"RANDEVU BULUNDU ({cat}): {available_dates}")
                     for d in available_dates:
@@ -1015,6 +1026,56 @@ class BLSScraper:
             
         # Eğer formatlı stringler varsa set() sort() desteklemez, normal dondur
         return list(set(available_days))
+
+    def _filter_dates_by_max(self, available_dates: list, max_date_str: str) -> list:
+        """
+        max_appointment_date (YYYY-MM-DD formatında) tarihinden sonraki
+        slotları listeden çıkarır.
+        available_dates formatı: ["6 (May 2026)", "12 (May 2026)", ...]
+        """
+        from datetime import datetime
+        
+        try:
+            max_date = datetime.strptime(max_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            self._log(logging.WARNING, f"max_appointment_date parse hatası: '{max_date_str}' — filtre atlanıyor.")
+            return available_dates
+        
+        # Ay isimleri eşlemesi (İngilizce — BLS sitesi İngilizce kullanıyor)
+        month_map = {
+            'january': 1, 'february': 2, 'march': 3, 'april': 4,
+            'may': 5, 'june': 6, 'july': 7, 'august': 8,
+            'september': 9, 'october': 10, 'november': 11, 'december': 12
+        }
+        
+        filtered = []
+        for date_str in available_dates:
+            try:
+                # Format: "6 (May 2026)" veya sadece "6"
+                if '(' in date_str and ')' in date_str:
+                    day_part = date_str.split('(')[0].strip()
+                    month_year = date_str.split('(')[1].replace(')', '').strip()
+                    parts = month_year.split()
+                    if len(parts) == 2:
+                        month_name = parts[0].lower()
+                        year = int(parts[1])
+                        day = int(day_part)
+                        month = month_map.get(month_name)
+                        if month:
+                            from datetime import date as date_cls
+                            slot_date = date_cls(year, month, day)
+                            if slot_date <= max_date:
+                                filtered.append(date_str)
+                            else:
+                                self._log(logging.DEBUG, f"  Tarih elendi: {date_str} > {max_date_str}")
+                            continue
+                # Parse edilemezse güvenli tarafta kal, dahil et
+                filtered.append(date_str)
+            except Exception:
+                # Parse hatası — güvenli tarafta kal, dahil et
+                filtered.append(date_str)
+        
+        return filtered
 
     def _handle_pending_appointment(self) -> bool:
         """

@@ -740,7 +740,7 @@ function AddCustomerModal({ user, onClose, onAdd }) {
     jurisdiction: 'Istanbul', location: 'Spain', category: 'Normal', appointment_for: 'Individual',
     visa_type: 'Schengen', visa_sub_type: 'Tourism', proxy_address: '',
     check_interval: 60, minimum_days: 0, is_active: true, headless: true, is_scout: false, auto_book: false,
-    email_app_password: '', travel_date: ''
+    email_app_password: '', travel_date: '', max_appointment_date: ''
   })
 
   useEffect(() => {
@@ -799,6 +799,10 @@ function AddCustomerModal({ user, onClose, onAdd }) {
           <div className="form-row">
             <div className="form-group"><label>📧 Email App Password {user && '(Blank = keep)'}</label><input name="email_app_password" type="password" placeholder="Gmail: App Password | Outlook: Normal şifre" onChange={handleChange} /></div>
             <div className="form-group"><label>✈️ Travel Date</label><input name="travel_date" type="date" value={formData.travel_date} onChange={handleChange} /></div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group"><label>🚫 Son Randevu Tarihi</label><input name="max_appointment_date" type="date" value={formData.max_appointment_date || ''} onChange={handleChange} /><p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>Bu tarihten sonraki randevular alınmaz</p></div>
           </div>
 
           <div className="form-row">

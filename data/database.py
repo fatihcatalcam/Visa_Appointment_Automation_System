@@ -132,6 +132,7 @@ class PostgresDatabase:
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS worker_state TEXT",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_app_password TEXT",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS travel_date TEXT",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS max_appointment_date TEXT",
                 ]
                 for sql in migrations:
                     try:

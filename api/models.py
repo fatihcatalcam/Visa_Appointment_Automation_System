@@ -7,6 +7,7 @@ class UserCreateUpdate(BaseModel):
     password_enc: str = "" # Plaintext password sent from UI, API will encrypt it before DB
     email_app_password: Optional[str] = ""
     travel_date: Optional[str] = ""
+    max_appointment_date: Optional[str] = ""
     first_name: Optional[str] = ""
     last_name: Optional[str] = ""
     phone: Optional[str] = ""

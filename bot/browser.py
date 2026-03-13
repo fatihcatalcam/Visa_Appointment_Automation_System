@@ -26,6 +26,7 @@ class BrowserFactory:
         self.proxy = user_data.get("proxy_address", "")
         self.driver = None
         self.wait = None
+        self._proxy_relay = None  # ProxyRelay instance for authenticated proxies
 
     def _log(self, level, msg):
         if self.log_func:
@@ -35,21 +36,22 @@ class BrowserFactory:
 
     def generate_fingerprint(self):
         """Generates a consistent, semi-random fingerprint based on user_id.
-        Uses a thread-local Random instance to avoid corrupting the global PRNG."""
+        Uses a thread-local Random instance to avoid corrupting the global PRNG.
+        Chrome version range updated to 134-146 to match modern Chrome installs."""
         rng = random.Random(str(self.user_data.get('id', '0')))
-        major_version = rng.randint(118, 122)
+        major_version = rng.randint(134, 146)
         minor = rng.randint(0, 9)
-        build = rng.randint(1000, 6000)
-        patch = rng.randint(0, 150)
+        build = rng.randint(5000, 7700)
+        patch = rng.randint(0, 200)
 
         os_options = [
             "Windows NT 10.0; Win64; x64",
-            "Windows NT 11.0; Win64; x64"
+            "Windows NT 10.0; Win64; x64",  # Win10 is most common
         ]
         os_ver = rng.choice(os_options)
         ua = f"Mozilla/5.0 ({os_ver}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{major_version}.0.{build}.{patch} Safari/537.36"
 
-        resolutions = ["1280,900", "1366,768", "1440,900", "1600,900", "1920,1080"]
+        resolutions = ["1366,768", "1440,900", "1600,900", "1920,1080"]
         res = rng.choice(resolutions)
         return ua, res
 
@@ -101,20 +103,27 @@ class BrowserFactory:
                     options.add_argument("--no-sandbox")
                     options.add_argument("--disable-dev-shm-usage")
                     options.add_argument(f"--window-size={res}")
-                    options.add_argument("--disable-extensions")
                     options.add_argument("--disable-background-networking")
                     options.add_argument("--disable-default-apps")
                     options.add_argument("--mute-audio")
                     options.add_argument("--js-flags=--max-old-space-size=256")
 
+                    # Anti-leak: WebRTC IP leak prevention + DNS leak prevention
+                    options.add_argument("--webrtc-ip-handling-policy=disable_non_proxied_udp")
+                    options.add_argument("--enforce-webrtc-ip-permission-check")
+                    options.add_argument("--disable-features=WebRtcHideLocalIpsWithMdns")
+
                     if self.proxy:
                         if "@" in self.proxy:
-                            from bot.proxy_auth import create_proxy_extension
-                            ext_path = create_proxy_extension(self.proxy)
-                            if ext_path:
-                                options.add_extension(ext_path)
-                                if attempt == 0:
-                                    self._log(logging.INFO, "Auth-Proxy Eklentisi Yüklendi.")
+                            # Headless Chrome does NOT load extensions!
+                            # Use local ProxyRelay: 127.0.0.1:PORT → upstream auth proxy
+                            from bot.proxy_relay import ProxyRelay
+                            if not self._proxy_relay:
+                                self._proxy_relay = ProxyRelay(self.proxy)
+                                self._proxy_relay.start()
+                            options.add_argument(f"--proxy-server=http://{self._proxy_relay.local_address}")
+                            if attempt == 0:
+                                self._log(logging.INFO, f"Proxy Relay aktif: 127.0.0.1:{self._proxy_relay.local_port} → {self.proxy.split('@')[1]}")
                         else:
                             options.add_argument(f"--proxy-server={self.proxy}")
                             if attempt == 0:
@@ -152,11 +161,13 @@ class BrowserFactory:
                 options.add_argument("--disable-blink-features=AutomationControlled")
                 if self.proxy:
                     if "@" in self.proxy:
-                        from bot.proxy_auth import create_proxy_extension
-                        ext_path = create_proxy_extension(self.proxy)
-                        if ext_path:
-                            options.add_extension(ext_path)
-                            self._log(logging.INFO, "Auth-Proxy Eklentisi Yüklendi.")
+                        # Non-headless can use extensions, but ProxyRelay is more reliable
+                        from bot.proxy_relay import ProxyRelay
+                        if not self._proxy_relay:
+                            self._proxy_relay = ProxyRelay(self.proxy)
+                            self._proxy_relay.start()
+                        options.add_argument(f"--proxy-server=http://{self._proxy_relay.local_address}")
+                        self._log(logging.INFO, f"Proxy Relay aktif: 127.0.0.1:{self._proxy_relay.local_port} → {self.proxy.split('@')[1]}")
                     else:
                         options.add_argument(f"--proxy-server={self.proxy}")
                         self._log(logging.INFO, f"Proxy Aktif: {self.proxy}")
@@ -167,7 +178,23 @@ class BrowserFactory:
                 options.add_argument(f"user-agent={ua}")
                 self.driver = webdriver.Chrome(options=options)
 
-            # Anti-detection JS
+            # ═══════════════════════════════════════════════════════════
+            # CDP Timezone & Geolocation Override (Match Turkish proxy)
+            # ═══════════════════════════════════════════════════════════
+            try:
+                self.driver.execute_cdp_cmd("Emulation.setTimezoneOverride", {
+                    "timezoneId": "Europe/Istanbul"
+                })
+                self.driver.execute_cdp_cmd("Emulation.setGeolocationOverride", {
+                    "latitude": 41.0082,
+                    "longitude": 28.9784,
+                    "accuracy": 100
+                })
+                self._log(logging.INFO, "Timezone → Europe/Istanbul, Geolocation → İstanbul")
+            except Exception as tz_err:
+                self._log(logging.WARNING, f"CDP timezone/geoloc override hatası: {tz_err}")
+
+            # Anti-detection JS (comprehensive for Chrome 134+)
             self.driver.execute_script(
                 "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
             )
@@ -175,20 +202,36 @@ class BrowserFactory:
             self.driver.execute_script(f"""
                 Object.defineProperty(window.screen, 'width', {{get: () => {width}}});
                 Object.defineProperty(window.screen, 'height', {{get: () => {height}}});
+                Object.defineProperty(window.screen, 'availWidth', {{get: () => {width}}});
+                Object.defineProperty(window.screen, 'availHeight', {{get: () => {height}}});
+                Object.defineProperty(navigator, 'maxTouchPoints', {{get: () => 0}});
+                Object.defineProperty(navigator, 'languages', {{get: () => ['tr-TR', 'tr', 'en-US', 'en']}});
+                Object.defineProperty(navigator, 'hardwareConcurrency', {{get: () => 4}});
+                Object.defineProperty(navigator, 'deviceMemory', {{get: () => 8}});
+                // Headless detection: override permissions query
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                    Promise.resolve({{ state: Notification.permission }}) :
+                    originalQuery(parameters)
+                );
+                // Override connection info to look like ethernet
+                if (navigator.connection) {{
+                    Object.defineProperty(navigator.connection, 'rtt', {{get: () => 50}});
+                }}
             """)
 
             # Selenium Stealth
             try:
                 from selenium_stealth import stealth
-                vendor = random.choice(["Google Inc.", "Apple Computer, Inc."])
                 renderer = random.choice([
-                    "Intel Iris OpenGL Engine",
-                    "AMD Radeon Pro 5300M OpenGL Engine",
-                    "ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0)"
+                    "ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0)",
+                    "ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0)",
+                    "ANGLE (Intel, Intel(R) HD Graphics 530 Direct3D11 vs_5_0 ps_5_0)",
                 ])
                 stealth(self.driver,
                         languages=["tr-TR", "tr", "en-US", "en"],
-                        vendor=vendor,
+                        vendor="Google Inc.",
                         platform="Win32",
                         webgl_vendor="Intel Inc.",
                         renderer=renderer,
@@ -198,14 +241,14 @@ class BrowserFactory:
                 self._log(logging.WARNING, "selenium-stealth kütüphanesi bulunamadı, standart ayarlar ile devam ediliyor.")
 
             self.wait = WebDriverWait(self.driver, 20)
-            self._log(logging.INFO, "Chrome WebDriver başlatıldı (Network Loglama Aktif)")
+            self._log(logging.INFO, "Chrome WebDriver başlatıldı (Anti-Detection Aktif)")
             return True
         except Exception as e:
             self._log(logging.ERROR, f"WebDriver başlatma hatası: {e}")
             return False
 
     def close_driver(self):
-        """Quit the WebDriver and release proxy slot."""
+        """Quit the WebDriver, release proxy slot, and stop ProxyRelay."""
         if self.driver:
             try:
                 self.driver.quit()
@@ -215,6 +258,13 @@ class BrowserFactory:
                 pass
             finally:
                 self.driver = None
+        # Stop the local proxy relay if running
+        if self._proxy_relay:
+            try:
+                self._proxy_relay.stop()
+            except Exception:
+                pass
+            self._proxy_relay = None
             self._log(logging.INFO, "WebDriver kapatıldı")
 
     def dump_network_logs(self):

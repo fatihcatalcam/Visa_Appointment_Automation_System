@@ -85,9 +85,26 @@ def metrics_root():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 # --- Serve Static Frontend Build ---
+from fastapi.responses import FileResponse
+from fastapi import HTTPException
+
 frontend_dist_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web_panel", "dist")
+
 if os.path.isdir(frontend_dist_path):
-    app.mount("/", StaticFiles(directory=frontend_dist_path, html=True), name="frontend")
+    assets_path = os.path.join(frontend_dist_path, "assets")
+    if os.path.isdir(assets_path):
+        app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
+    
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_frontend(full_path: str):
+        # Don't intercept API or metrics routes
+        if full_path.startswith("api/") or full_path.startswith("metrics") or full_path.startswith("health"):
+            raise HTTPException(status_code=404, detail="Not Found")
+            
+        index_path = os.path.join(frontend_dist_path, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        return {"message": "Web panel build bulunamadı"}
 else:
     logger.warning(f"Frontend dist path not found at {frontend_dist_path}. Please run 'npm run build' inside web_panel/")
 

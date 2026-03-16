@@ -109,6 +109,8 @@ def test_notification(request: Request):
         admin_ids_raw = config.get("telegram_admin_id", "").strip()
         if bot_token and admin_ids_raw:
             import urllib.request
+            import ssl
+            ctx = ssl._create_unverified_context()
             admin_ids = [x.strip() for x in admin_ids_raw.split(",") if x.strip()]
             alert_msg = f"🧪 *TEST BİLDİRİMİ*\n🎉 *RANDEVU BULUNDU!*\n📅 {test_dates}\n\n_Bu bir test bildirimidir._"
             sent_count = 0
@@ -117,7 +119,7 @@ def test_notification(request: Request):
                     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
                     payload = json.dumps({"chat_id": aid, "text": alert_msg, "parse_mode": "Markdown"}).encode()
                     req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-                    resp = urllib.request.urlopen(req, timeout=10)
+                    resp = urllib.request.urlopen(req, timeout=10, context=ctx)
                     sent_count += 1
                 except Exception as te:
                     results["telegram"] = f"ID {aid}: {str(te)[:80]}"

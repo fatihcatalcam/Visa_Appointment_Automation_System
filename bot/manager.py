@@ -395,7 +395,8 @@ class WorkerThread(threading.Thread):
             admin_ids_raw = self.global_config.get("telegram_admin_id", "").strip()
             if bot_token and admin_ids_raw:
                 try:
-                    import urllib.request, json as _json
+                    import urllib.request, json as _json, ssl
+                    ctx = ssl._create_unverified_context()
                     admin_ids = [x.strip() for x in admin_ids_raw.split(",") if x.strip()]
                     alert_msg = f"🎉 RANDEVU BULUNDU!\n👤 {self.user.get('first_name')} {self.user.get('last_name', '')}\n📅 {dates_str}"
                     for aid in admin_ids:
@@ -403,7 +404,7 @@ class WorkerThread(threading.Thread):
                             url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
                             payload = _json.dumps({"chat_id": aid, "text": alert_msg}).encode()
                             req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-                            urllib.request.urlopen(req, timeout=10)
+                            urllib.request.urlopen(req, timeout=10, context=ctx)
                         except Exception as te:
                             self._log(logging.ERROR, f"Telegram bildirim hatası (ID {aid}): {te}")
                     self._log(logging.INFO, "📨 Telegram bildirimi gönderildi")

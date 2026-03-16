@@ -237,7 +237,23 @@ function App() {
     setShowAddModal(true)
   }
 
-  const exportExcel = () => { window.location.href = `${API_BASE}/workers/export/excel` }
+  const exportExcel = async () => {
+    try {
+      const res = await apiFetch(`${API_BASE}/workers/export/excel`);
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'vize_hesaplari.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+    } catch (err) {
+      alert("Error exporting excel: " + err.message);
+    }
+  }
 
   const importExcel = async (e) => {
     const file = e.target.files[0]

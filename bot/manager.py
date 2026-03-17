@@ -226,13 +226,15 @@ class WorkerThread(threading.Thread):
 
             # Ana Döngü
             start_time = time.time()
+            loop_error_count = 0  # Retry counter for error classifier
             while self.running:
+              try:
                 # B6: Soft-Restart (12 hours) to prevent memory fragmentation
                 if time.time() - start_time > 12 * 3600:
                     self._log(logging.INFO, "♻️ 12 saatlik kesintisiz çalışma sınırı. Bellek şişmesini önlemek için tarayıcı yeniden başlatılıyor...")
                     if self.scraper:
                         try: self.scraper.stop_driver()
-                        except: pass
+                        except Exception: pass
                     if not self.scraper.start_driver():
                         self._log(logging.ERROR, "Soft-restart başarısız oldu. İşçi thread kapatılıyor.")
                         return
@@ -276,6 +278,9 @@ class WorkerThread(threading.Thread):
                 
                 now_str = time.strftime("%d.%m.%Y %H:%M:%S")
 
+                # Reset error counter on successful check cycle
+                loop_error_count = 0
+
                 if result.get("available"):
                     dates_str = ", ".join(result.get("dates", []))
                     self._log(logging.INFO, f"🎉 RANDEVU BULUNDU: {dates_str}")
@@ -308,7 +313,7 @@ class WorkerThread(threading.Thread):
                     # Randevu başarıyla alındıysa botu durdur
                     if book_result:
                         self._log(logging.INFO, "🛑 Randevu başarıyla alındığı için bot durduruluyor.")
-                        self.stop_requested = True
+                        self.running = False
                         return
                     else:
                         self._log(logging.INFO, "Randevu bulunamadı ama slot vardı, tekrar denenecek.")
@@ -335,7 +340,7 @@ class WorkerThread(threading.Thread):
                          if self.scraper:
                              try:
                                  self.scraper.stop_driver() # Kapat ki RAM yemesin
-                             except: pass
+                             except Exception: pass
                          self._wait_for_scout(user_id, jurisdiction)
                          if not self.running: break
                          continue # Restart loop to init scraper again
@@ -353,25 +358,35 @@ class WorkerThread(threading.Thread):
                 wait = check_interval + random.randint(0, 30)
                 self._wait(wait)
 
-        except Exception as e:
-            from bot.error_classifier import classify_error, get_weight, get_backoff
-            error_type = classify_error(exception=e)
-            weight = get_weight(error_type)
-            self._log(logging.ERROR, f"Bot döngüsü çöktü [{error_type}]: {e}")
-            UserRepository.update_status(user_id, status="Hata", error_msg=f"[{error_type}] {str(e)[:40]}")
-            # Apply classified risk penalty
-            if weight.account_risk_points > 0:
-                from config.database import report_account_risk
-                report_account_risk(user_id, weight.account_risk_points, reason=f"Worker crash: {error_type}")
-            if weight.proxy_fails > 0 and self.scraper and self.scraper.proxy:
-                proxy_manager.report_failure(self.scraper.proxy, error_type=weight.proxy_error_type)
+              except Exception as e:
+                from bot.error_classifier import classify_error, get_weight, get_backoff
+                error_type = classify_error(exception=e)
+                weight = get_weight(error_type)
+                proxy_info = f" [Proxy: {self.scraper.proxy}]" if self.scraper and self.scraper.proxy else ""
+                self._log(logging.ERROR, f"Bot döngüsü hatası [{error_type}]{proxy_info}: {e}")
+                UserRepository.update_status(user_id, status="Hata", error_msg=f"[{error_type}] {str(e)[:40]}")
+                # Apply classified risk penalty
+                if weight.account_risk_points > 0:
+                    from config.database import report_account_risk
+                    report_account_risk(user_id, weight.account_risk_points, reason=f"Worker crash: {error_type}")
+                if weight.proxy_fails > 0 and self.scraper and self.scraper.proxy:
+                    proxy_manager.report_failure(self.scraper.proxy, error_type=weight.proxy_error_type)
+                # Retry with classified backoff instead of dying
+                loop_error_count += 1
+                if loop_error_count >= weight.max_retries:
+                    self._log(logging.ERROR, f"Maksimum yeniden deneme ({weight.max_retries}) aşıldı. İşçi durduruluyor.")
+                    break
+                backoff_delay = get_backoff(error_type, loop_error_count - 1)
+                self._log(logging.WARNING, f"Yeniden deneme {loop_error_count}/{weight.max_retries} — {backoff_delay}s bekleniyor...")
+                self._wait(backoff_delay)
+
         finally:
             # P0: Always release the semaphore slot when thread exits
             self._semaphore.release()
             if self.scraper:
                 try:
                     self.scraper.stop_driver()
-                except:
+                except Exception:
                     pass
             UserRepository.update_status(user_id, status="Durduruldu")
             self._log(logging.INFO, "Bot durduruldu.")

@@ -300,8 +300,8 @@ class BLSScraper:
                 self._log(logging.INFO, f"--- Kategori Kontrol Ediliyor: {cat} ---")
                 
                 if index > 0:
-                    # Yeni kategori kontrolü öncesi, normal taramaya benzer bekleme koy
-                    delay = int(self.user_data.get("check_interval", 60))
+                    # Kategoriler arası kısa bekleme (tam check_interval değil, sadece sayfa yüklenme süresi)
+                    delay = 5
                     self._log(logging.INFO, f"Sıradaki kategori ({cat}) için {delay} saniye bekleniyor...")
                     time.sleep(delay)
                     

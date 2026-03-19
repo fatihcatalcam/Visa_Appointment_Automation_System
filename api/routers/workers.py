@@ -81,7 +81,14 @@ def kill_all_workers(bot_manager = Depends(get_bot_manager)):
         os.system("taskkill /f /im chromedriver.exe /T >nul 2>&1")
     return {"status": "success", "message": f"Emergency kill: {killed} bot processes terminated."}
 
-from config.database import clear_user_cooldown
+from config.database import clear_user_cooldown, clear_all_cooldowns
+
+@router.post("/clear_all_cooldowns", summary="Global Cooldown Reset")
+def clear_all_worker_cooldowns():
+    """Resets the cooldown state for ALL accounts at once."""
+    count = clear_all_cooldowns()
+    return {"status": "success", "message": f"Cooldown cleared for {count} users"}
+
 @router.post("/{user_id}/clear_cooldown", summary="Clear Cooldown for a user")
 def clear_worker_cooldown(user_id: int):
     """Resets the cooldown constraint on a user/bot."""

@@ -408,6 +408,11 @@ function App() {
                 <button className="btn-success" title="Tüm Aktif Müşterileri Başlatır" onClick={() => handleAction('workers/start_all')}>▶ Start Auto</button>
                 <button className="btn-secondary" title="Tüm Müşterileri Beklemeye Alır" onClick={() => handleAction('workers/stop_all')}>⏸ Standby</button>
                 <button className="btn-emergency" title="DİKKAT: Tüm işlemleri zorla durdurur ve Chrome'u kapatır" onClick={() => handleAction('workers/kill_all')}>🛑 KILL SWITCH</button>
+                <button className="btn-secondary" title="Tüm hesapların bekleme sürelerini sıfırlar" style={{ color: '#f59e0b', borderColor: '#f59e0b33' }} onClick={async () => {
+                  if (!confirm("Tüm hesapların cooldown süreleri sıfırlansın mı?")) return;
+                  await handleAction('workers/clear_all_cooldowns');
+                  alert("Tüm cooldown süreleri sıfırlandı!");
+                }}>⏳ Reset All Cooldowns</button>
                 <button className="btn-secondary" title="Tüm bildirim kanallarına test mesajı gönderir" onClick={async () => {
                   try {
                     const res = await apiFetch(`${API_BASE}/system/test_notification`, { method: 'POST' });

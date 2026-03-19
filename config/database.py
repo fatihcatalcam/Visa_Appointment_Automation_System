@@ -63,6 +63,17 @@ def update_user_status(user_id, status, error_msg="", last_check=None):
 def clear_user_cooldown(user_id):
     UserRepository.update(user_id, {"cooldown_until": None, "status": "Bekliyor", "error_msg": ""})
 
+def clear_all_cooldowns():
+    """Clears cooldown state for ALL users at once."""
+    from data.database import db
+    conn = db.get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE users SET cooldown_until = NULL, status = 'Bekliyor', error_msg = '' WHERE cooldown_until IS NOT NULL")
+            return cur.rowcount
+    finally:
+        db.release_connection(conn)
+
 def delete_user(user_id):
     UserRepository.delete(user_id)
 

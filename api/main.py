@@ -55,10 +55,22 @@ app = FastAPI(
     # Auth is applied per-router below instead.
 )
 
-# CORS configuration - Restricted to local dev server origins
+# CORS configuration - Dev origins + dynamic VPS IP detection
 default_cors = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
 cors_str = os.getenv("CORS_ORIGINS", default_cors)
 allow_origins_list = [origin.strip() for origin in cors_str.split(",") if origin.strip()]
+
+# Auto-detect VPS IP so the self-served frontend isn't blocked by CORS
+try:
+    import socket
+    api_port = int(os.getenv("API_PORT", "8000"))
+    hostname = socket.gethostname()
+    for ip in socket.getaddrinfo(hostname, None, socket.AF_INET):
+        vps_origin = f"http://{ip[4][0]}:{api_port}"
+        if vps_origin not in allow_origins_list:
+            allow_origins_list.append(vps_origin)
+except Exception:
+    pass
 
 app.add_middleware(
     CORSMiddleware,

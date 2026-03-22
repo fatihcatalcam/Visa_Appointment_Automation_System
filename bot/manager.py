@@ -545,7 +545,11 @@ class BotManager:
     @property
     def active_worker_count(self):
         with self._lock:
-            return sum(1 for t in self.threads.values() if t.is_alive())
+            # Purge dead thread references to prevent unbounded dict growth
+            dead_uids = [uid for uid, t in self.threads.items() if not t.is_alive()]
+            for uid in dead_uids:
+                del self.threads[uid]
+            return len(self.threads)
 
     def start_all(self):
         users = UserRepository.get_active()

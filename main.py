@@ -58,7 +58,7 @@ if __name__ == "__main__":
     try:
         uvicorn.run("api.main:app", host=api_host, port=api_port, log_level="info")
     except Exception as e:
-        logger.error(f"Uvicorn exit error: {e}")
+        logging.error(f"Uvicorn exit error: {e}")
     finally:
         logging.info("")
         logging.info("==========================================================")

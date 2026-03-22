@@ -216,6 +216,7 @@ class ProxyManager:
 
     def report_failure(self, address, error_type="general"):
         if not address: return
+        disabled_flag = False
         r = redis_manager.get_client()
         if redis_manager.is_connected and r:
             # Register Lua script on first use (lazy init)
@@ -229,6 +230,7 @@ class ProxyManager:
                     args=[5, 1800, error_type, address, int(time.time())]
                 )
                 if disabled:
+                    disabled_flag = True
                     logger.error(f"🔴 ATOMIC: Proxy {address} eşiği aştı ({error_type}). 30dk cooldown.")
                     # P2: Cascading disable circuit breaker
                     self._check_circuit_breaker(r)
@@ -238,7 +240,7 @@ class ProxyManager:
                 r.hincrby(key, "fail_count", 1)
                 r.hincrby(key, "consecutive_fails", 1)
 
-        def _bg_fail(was_disabled=bool(disabled) if 'disabled' in dir() else False):
+        def _bg_fail(was_disabled=disabled_flag):
             # If it was disabled by Lua, pass that to Postgres
             if was_disabled:
                 dt = (datetime.datetime.now() + datetime.timedelta(seconds=1800)).strftime("%Y-%m-%d %H:%M:%S")

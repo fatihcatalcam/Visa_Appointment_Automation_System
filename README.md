@@ -1,8 +1,9 @@
-# Comp-Bot
+# Visa Appointment Automation System
+
 
 **Distributed Browser Automation Platform**
 
-Comp-Bot is a modular browser automation platform designed to monitor visa appointment availability and manage automated workflows through a web-based control system.
+Visa Appointment Automation System is a modular browser automation platform designed to monitor visa appointment availability and manage automated workflows through a web-based control system.
 
 The project combines browser automation, backend APIs, infrastructure services, and monitoring tools into a unified architecture designed for long-running server environments.
 
@@ -10,7 +11,7 @@ The project combines browser automation, backend APIs, infrastructure services, 
 
 # Overview
 
-Comp-Bot is designed as an automation platform rather than a simple script.
+Visa Appointment Automation System is designed as an automation platform rather than a simple script.
 The system integrates automation workers, a backend API, monitoring infrastructure, and a web management interface.
 
 The platform can run continuously on a VPS and be managed through the dashboard.
@@ -34,7 +35,7 @@ The platform can run continuously on a VPS and be managed through the dashboard.
 The project follows a layered architecture separating automation logic, API services, infrastructure, and the frontend interface.
 
 ```
-comp-bot
+Visa Appointment Automation System
 │
 ├ api/            FastAPI backend
 ├ bot/            browser automation engine
@@ -94,8 +95,8 @@ comp-bot
 ### Clone the repository
 
 ```
-git clone https://github.com/fatihcatalcam/comp-bot
-cd comp-bot
+git clone https://github.com/fatihcatalcam/Visa Appointment Automation System
+cd Visa Appointment Automation System
 ```
 
 ---
